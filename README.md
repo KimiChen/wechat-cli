@@ -136,7 +136,7 @@ sudo codesign --force --sign - --entitlements /dev/stdin /Applications/WeChat.ap
 EOF
 ```
 
-> **Heads up:** Re-signing WeChat is safe and will **not** cause account issues or bans. However, it may affect WeChat's auto-update mechanism. If WeChat prompts you to update but fails, simply re-download and install WeChat from the official website, then re-run `sudo wechat-cli init`.
+> **Heads up:** Re-signing WeChat is safe and will **not** cause account issues or bans. However, it may affect WeChat's auto-update mechanism. If you notice any feature not working properly, or want to update WeChat to the latest version, simply re-download and reinstall WeChat from the [official website](https://mac.weixin.qq.com/) — no need to re-run `init`, your existing config and keys will continue to work.
 
 ### Step 2 — Use It
 
@@ -338,6 +338,17 @@ WeChat stores chat data in SQLCipher-encrypted SQLite databases locally. WeChat 
 ## 📄 License
 
 [Apache License 2.0](LICENSE)
+
+---
+
+## ⚖️ Disclaimer
+
+This project is a local data query tool for personal use only. Please note:
+
+- **Read-only** — this tool only reads locally stored data, it does not send, modify, or delete any messages
+- **No cloud transmission** — all data stays on your local machine, nothing is uploaded to any server
+- **No WeChat ecosystem disruption** — this tool does not interfere with WeChat's normal operation, does not automate any actions, and does not violate WeChat's Terms of Service
+- **Use at your own risk** — this project is for personal learning and research purposes only. Users are responsible for ensuring compliance with local laws and regulations
 
 ---
 
