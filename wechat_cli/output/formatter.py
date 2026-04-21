@@ -1,29 +1,53 @@
-"""输出格式化 — JSON (大模型友好) / Text (人类可读)"""
+"""Output helpers for JSON and plain text."""
 
 import json
+import os
 import sys
 
 
-def output_json(data, file=None):
+def _prepare_stream(file):
     file = file or sys.stdout
-    json.dump(data, file, ensure_ascii=False, indent=2)
-    file.write('\n')
+    if os.name == "nt" and getattr(file, "isatty", lambda: False)():
+        reconfigure = getattr(file, "reconfigure", None)
+        if reconfigure:
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
+    return file
+
+
+def _write_text(file, text):
+    file = _prepare_stream(file)
+    try:
+        file.write(text)
+    except UnicodeEncodeError:
+        encoding = getattr(file, "encoding", None) or "utf-8"
+        buffer = getattr(file, "buffer", None)
+        data = text.encode(encoding, errors="replace")
+        if buffer is not None:
+            buffer.write(data)
+        else:
+            file.write(data.decode(encoding, errors="replace"))
+
+
+def output_json(data, file=None):
+    rendered = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    _write_text(file or sys.stdout, rendered)
 
 
 def output_text(text, file=None):
-    file = file or sys.stdout
-    file.write(text)
-    if not text.endswith('\n'):
-        file.write('\n')
+    rendered = text if text.endswith("\n") else text + "\n"
+    _write_text(file or sys.stdout, rendered)
 
 
-def output(data, fmt='json', file=None):
-    if fmt == 'json':
+def output(data, fmt="json", file=None):
+    if fmt == "json":
         output_json(data, file)
     else:
         if isinstance(data, str):
             output_text(data, file)
-        elif isinstance(data, dict) and 'text' in data:
-            output_text(data['text'], file)
+        elif isinstance(data, dict) and "text" in data:
+            output_text(data["text"], file)
         else:
             output_json(data, file)
