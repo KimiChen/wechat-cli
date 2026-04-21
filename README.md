@@ -35,7 +35,7 @@
 ```bash
 git clone <this-repo-url>
 cd wechat-cli
-pip install -e .
+py -3.14 -m pip install -e .
 ```
 
 ### Windows PowerShell 中如何执行命令
