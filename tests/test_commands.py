@@ -45,6 +45,28 @@ class CommandRegressionTests(unittest.TestCase):
         self.assertIn("Alice  (alice)", result.output)
         self.assertIn("Bob  (bob)  备注: Teammate", result.output)
 
+    def test_members_reports_missing_group_with_exit_code_1(self):
+        with mock.patch.object(members_cmd, "resolve_username", return_value=None):
+            result = self.runner.invoke(
+                members_cmd.members,
+                ["UnknownGroup"],
+                obj=self.app,
+            )
+
+        self.assertEqual(result.exit_code, 1, result.output)
+        self.assertIn("找不到: UnknownGroup", result.output)
+
+    def test_members_reports_non_group_with_exit_code_1(self):
+        with mock.patch.object(members_cmd, "resolve_username", return_value="alice"):
+            result = self.runner.invoke(
+                members_cmd.members,
+                ["Alice"],
+                obj=self.app,
+            )
+
+        self.assertEqual(result.exit_code, 1, result.output)
+        self.assertIn("Alice 不是群聊", result.output)
+
     def test_cli_help_lists_supported_commands_and_hides_legacy_alias(self):
         result = self.runner.invoke(cli, ["--help"])
 
@@ -130,6 +152,104 @@ class CommandRegressionTests(unittest.TestCase):
         self.assertEqual(payload["results"], ["[Known] hello"])
         self.assertEqual(payload["failures"], ["无消息记录: NoHistory"])
 
+    def test_search_reports_invalid_time_range_with_exit_code_2(self):
+        with mock.patch.object(search_cmd, "validate_pagination", return_value=None):
+            with mock.patch.object(
+                search_cmd,
+                "parse_time_range",
+                side_effect=ValueError("bad time range"),
+            ):
+                result = self.runner.invoke(
+                    search_cmd.search,
+                    ["hello", "--start-time", "bad"],
+                    obj=self.app,
+                )
+
+        self.assertEqual(result.exit_code, 2, result.output)
+        self.assertIn("bad time range", result.output)
+
+    def test_search_reports_missing_chat_with_exit_code_1(self):
+        with mock.patch.object(search_cmd, "validate_pagination", return_value=None):
+            with mock.patch.object(search_cmd, "parse_time_range", return_value=(None, None)):
+                with mock.patch.object(search_cmd, "get_contact_names", return_value={}):
+                    with mock.patch.object(search_cmd, "resolve_chat_context", return_value=None):
+                        result = self.runner.invoke(
+                            search_cmd.search,
+                            ["hello", "--chat", "Unknown"],
+                            obj=self.app,
+                        )
+
+        self.assertEqual(result.exit_code, 1, result.output)
+        self.assertIn("找不到聊天对象: Unknown", result.output)
+
+    def test_search_reports_missing_message_history_with_exit_code_1(self):
+        chat_ctx = {
+            "display_name": "Alice",
+            "username": "alice",
+            "is_group": False,
+            "db_path": None,
+        }
+        with mock.patch.object(search_cmd, "validate_pagination", return_value=None):
+            with mock.patch.object(search_cmd, "parse_time_range", return_value=(None, None)):
+                with mock.patch.object(search_cmd, "get_contact_names", return_value={}):
+                    with mock.patch.object(search_cmd, "resolve_chat_context", return_value=chat_ctx):
+                        result = self.runner.invoke(
+                            search_cmd.search,
+                            ["hello", "--chat", "Alice"],
+                            obj=self.app,
+                        )
+
+        self.assertEqual(result.exit_code, 1, result.output)
+        self.assertIn("找不到 Alice 的消息记录", result.output)
+
+    def test_search_reports_no_queryable_multichat_with_details(self):
+        with mock.patch.object(search_cmd, "validate_pagination", return_value=None):
+            with mock.patch.object(search_cmd, "parse_time_range", return_value=(None, None)):
+                with mock.patch.object(search_cmd, "get_contact_names", return_value={}):
+                    with mock.patch.object(
+                        search_cmd,
+                        "resolve_chat_contexts",
+                        return_value=([], ["Missing"], ["NoHistory"]),
+                    ):
+                        result = self.runner.invoke(
+                            search_cmd.search,
+                            ["hello", "--chat", "Missing", "--chat", "NoHistory"],
+                            obj=self.app,
+                        )
+
+        self.assertEqual(result.exit_code, 1, result.output)
+        self.assertIn("错误: 没有可查询的聊天对象", result.output)
+        self.assertIn("未找到: Missing", result.output)
+        self.assertIn("无消息记录: NoHistory", result.output)
+
+    def test_search_text_mode_reports_empty_results(self):
+        chat_ctx = {
+            "display_name": "Team",
+            "username": "room@chatroom",
+            "is_group": True,
+            "db_path": "team.db",
+            "table_name": "Msg_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "message_tables": [{"db_path": "team.db", "table_name": "Msg_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
+            "query": "Team",
+        }
+        with mock.patch.object(search_cmd, "validate_pagination", return_value=None):
+            with mock.patch.object(search_cmd, "parse_time_range", return_value=(None, None)):
+                with mock.patch.object(search_cmd, "get_contact_names", return_value={}):
+                    with mock.patch.object(search_cmd, "resolve_chat_context", return_value=chat_ctx):
+                        with mock.patch.object(
+                            search_cmd,
+                            "collect_chat_search",
+                            return_value=([], []),
+                        ):
+                            result = self.runner.invoke(
+                                search_cmd.search,
+                                ["hello", "--chat", "Team", "--format", "text"],
+                                obj=self.app,
+                            )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn('在 Team 中未找到包含 "hello" 的消息', result.output)
+
     def test_sessions_json_uses_standard_result_shape(self):
         rows = [
             ("alice", 1, "hello", 1_700_000_000, 1, "", ""),
@@ -170,6 +290,17 @@ class CommandRegressionTests(unittest.TestCase):
         self.assertEqual(payload["query"], "ali")
         self.assertIsNone(payload["failures"])
         self.assertEqual(payload["contacts"], contacts)
+
+    def test_contacts_detail_reports_missing_contact(self):
+        with mock.patch.object(contacts_cmd, "find_contact_detail", return_value=None):
+            result = self.runner.invoke(
+                contacts_cmd.contacts,
+                ["--detail", "ghost", "--format", "text"],
+                obj=self.app,
+            )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("找不到联系人: ghost", result.output)
 
     def test_favorites_json_uses_standard_result_shape(self):
         favorites = [{"id": 1, "summary": "hello"}]
@@ -227,6 +358,83 @@ class CommandRegressionTests(unittest.TestCase):
         self.assertTrue(payload["is_group"])
         self.assertEqual(payload["failures"], ["partial"])
         self.assertEqual(payload["total"], 12)
+
+    def test_stats_reports_invalid_time_range_with_exit_code_2(self):
+        with mock.patch.object(
+            stats_cmd,
+            "parse_time_range",
+            side_effect=ValueError("bad time range"),
+        ):
+            result = self.runner.invoke(
+                stats_cmd.stats,
+                ["Team", "--start-time", "bad"],
+                obj=self.app,
+            )
+
+        self.assertEqual(result.exit_code, 2, result.output)
+        self.assertIn("bad time range", result.output)
+
+    def test_stats_reports_missing_chat_with_exit_code_1(self):
+        with mock.patch.object(stats_cmd, "parse_time_range", return_value=(None, None)):
+            with mock.patch.object(stats_cmd, "resolve_chat_context", return_value=None):
+                result = self.runner.invoke(
+                    stats_cmd.stats,
+                    ["Unknown"],
+                    obj=self.app,
+                )
+
+        self.assertEqual(result.exit_code, 1, result.output)
+        self.assertIn("找不到聊天对象: Unknown", result.output)
+
+    def test_stats_reports_missing_message_history_with_exit_code_1(self):
+        chat_ctx = {
+            "display_name": "Alice",
+            "username": "alice",
+            "is_group": False,
+            "db_path": None,
+        }
+        with mock.patch.object(stats_cmd, "parse_time_range", return_value=(None, None)):
+            with mock.patch.object(stats_cmd, "resolve_chat_context", return_value=chat_ctx):
+                result = self.runner.invoke(
+                    stats_cmd.stats,
+                    ["Alice"],
+                    obj=self.app,
+                )
+
+        self.assertEqual(result.exit_code, 1, result.output)
+        self.assertIn("找不到 Alice 的消息记录", result.output)
+
+    def test_stats_text_mode_includes_group_range_and_failures(self):
+        chat_ctx = {
+            "display_name": "Team",
+            "username": "room@chatroom",
+            "is_group": True,
+            "db_path": "team.db",
+        }
+        stats_result = {
+            "total": 12,
+            "type_breakdown": {"文本": 10, "图片": 2},
+            "top_senders": [{"name": "Alice", "count": 5}],
+            "hourly": {hour: 0 for hour in range(24)},
+            "failures": ["partial"],
+        }
+
+        with mock.patch.object(stats_cmd, "parse_time_range", return_value=(100, 200)):
+            with mock.patch.object(stats_cmd, "resolve_chat_context", return_value=chat_ctx):
+                with mock.patch.object(stats_cmd, "get_contact_names", return_value={}):
+                    with mock.patch.object(stats_cmd, "collect_chat_stats", return_value=stats_result):
+                        result = self.runner.invoke(
+                            stats_cmd.stats,
+                            ["Team", "--format", "text", "--start-time", "2026-04-01", "--end-time", "2026-04-02"],
+                            obj=self.app,
+                        )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("Team 聊天统计 [群聊]", result.output)
+        self.assertIn("时间范围: 2026-04-01 ~ 2026-04-02", result.output)
+        self.assertIn("消息类型分布:", result.output)
+        self.assertIn("发言排行 Top 10:", result.output)
+        self.assertIn("查询失败:", result.output)
 
     def test_session_updates_command_outputs_service_payload_as_json(self):
         payload = {
