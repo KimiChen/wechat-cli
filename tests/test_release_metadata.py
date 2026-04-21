@@ -18,9 +18,20 @@ class ReleaseMetadataTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("Release metadata is aligned", result.stdout)
 
-    def test_readme_mentions_published_npm_package_name(self):
+    def test_release_metadata_script_passes_in_isolated_mode(self):
+        result = subprocess.run(
+            [sys.executable, "-I", "scripts/check_release_metadata.py"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Release metadata is aligned", result.stdout)
+
+    def test_readme_describes_python_only_installation(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn("npm install -g @canghe_ai/wechat-cli", readme)
+        self.assertIn("pip install -e .", readme)
+        self.assertIn("构建 Python 包", readme)
 
     def test_readme_links_developer_guide(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -34,14 +45,15 @@ class ReleaseMetadataTests(unittest.TestCase):
             "decrypted_cache_ttl_hours",
             "session-updates",
             "package_smoke.py",
+            "prepare_release.py",
         ):
             self.assertIn(snippet, guide)
 
-    def test_npm_wrappers_use_shared_package_metadata_file(self):
-        install_js = (ROOT / "npm" / "wechat-cli" / "install.js").read_text(encoding="utf-8")
-        wrapper_js = (ROOT / "npm" / "wechat-cli" / "bin" / "wechat-cli.js").read_text(encoding="utf-8")
-        self.assertIn("require('./package-metadata.json')", install_js)
-        self.assertIn("require('../package-metadata.json')", wrapper_js)
+    def test_ci_package_smoke_is_python_only(self):
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        self.assertIn("Python Package Smoke", workflow)
+        self.assertIn("python scripts/package_smoke.py", workflow)
+        self.assertIn("python -m pip install build", workflow)
 
 
 if __name__ == "__main__":

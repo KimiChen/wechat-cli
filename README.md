@@ -5,7 +5,7 @@
 **命令行查询本地微信数据，专为 AI 集成设计。**
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)](https://github.com/freestylefly/wechat-cli)
+![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)
 
 聊天记录 · 联系人 · 会话 · 收藏 · 统计 · 导出
 
@@ -26,12 +26,14 @@
 
 ## 📥 安装
 
+建议直接从源码安装，或在本地构建 Python 包。
+
 ### 从源码安装
 
 需要 Python >= 3.10。
 
 ```bash
-git clone https://github.com/freestylefly/wechat-cli.git
+git clone <this-repo-url>
 cd wechat-cli
 pip install -e .
 ```
@@ -298,8 +300,8 @@ wechat-cli session-updates                 # 后续: 仅返回上次以来有变
 
 | 平台 | 状态 | 说明 |
 |------|------|------|
-| macOS (Apple Silicon) | ✅ 支持 | 内置 arm64 二进制 |
-| macOS (Intel) | ✅ 支持 | 需要 x86_64 二进制 |
+| macOS (Apple Silicon) | ✅ 支持 | 通过 Python 环境运行 |
+| macOS (Intel) | ✅ 支持 | 通过 Python 环境运行 |
 | Windows | ✅ 支持 | 读取 Weixin.exe 进程内存 |
 | Linux | ✅ 支持 | 读取 /proc/pid/mem，需要 root |
 
@@ -317,9 +319,9 @@ wechat-cli session-updates                 # 后续: 仅返回上次以来有变
 
 ## 🛠️ 开发者文档
 
-如果你在继续重构、补测试或准备发布，请先看 [docs/development.md](docs/development.md)。
+如果你在继续重构、补测试或准备 Python 包发布，请先看 [docs/development.md](docs/development.md)。
 
-这份文档记录了当前项目分层、微信目录约定、缓存行为、发布检查脚本和已知兼容性边界。
+这份文档记录了当前项目分层、微信目录约定、缓存行为、Python-only 发布检查脚本和已知兼容性边界。
 
 ---
 

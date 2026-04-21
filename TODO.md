@@ -2,6 +2,8 @@
 
 这份清单按 `P0` 到 `P3` 排序，优先处理会影响可用性、正确性和后续维护成本的问题。
 
+说明：当前仓库已经收口为纯 Python CLI 与打包链路。
+
 ## P0 先稳住 CLI 可用性
 
 - [x] 修复 `members --format text` 的运行时错误。
@@ -37,23 +39,23 @@
 - [x] 重新定义 `new-messages` 的语义。
   现已显式定义为“基于 `session.db` 的会话级更新流”，并新增推荐命令 `session-updates`；`new-messages` 保留为兼容别名，JSON 结果也增加了 `stream_type`、`tracked_by`、`snapshot_kind` 来消除歧义。
 
-## P3 补工程化和发布链路
+## P3 补工程化和 Python 发布链路
 
-- [x] 对齐 Python 包、npm 主包和各平台包版本号。
-  当前已把 Python CLI 版本收敛到 `wechat_cli.__version__`，并新增 `scripts/check_release_metadata.py` 校验 `pyproject.toml`、npm 主包、平台包和可选依赖版本是否一致；`package_smoke` 也会先跑这层校验，避免发布前版本漂移。
-- [x] 修正 npm wrapper 里的错误提示与包名文案。
-  当前 npm wrapper 已共享 `package-metadata.json` 中的主包名与平台包映射，`install.js` 和 `bin/wechat-cli.js` 的错误提示会明确指向真实发布包 `@canghe_ai/wechat-cli`，README 里的 npm 安装命令也已改成显式包名。
-- [x] 增加基础 CI。
-  当前已新增 GitHub Actions 工作流，覆盖跨平台 `compileall`、`unittest`，以及基于 `python -m build` + `npm pack` 的打包 smoke check；同时补了本地可复用的 `scripts/package_smoke.py` 入口，方便在发布前手动复跑。
+- [x] 对齐 Python 发布元数据。
+  当前已把 Python CLI 版本收敛到 `wechat_cli.__version__`，并新增 `scripts/check_release_metadata.py` 仅校验 `pyproject.toml` 与运行时版本是否一致；`package_smoke` 也会先跑这层校验，避免发布前版本漂移。
+- [x] 增加 Python-only 基础 CI。
+  当前 GitHub Actions 已覆盖跨平台 `compileall`、`unittest`，以及基于 `python -m build` 的打包 smoke check。
 - [x] 补开发者文档。
-  当前已新增 `docs/development.md` 并从 README 链出，覆盖项目分层、数据库目录约定、缓存目录/TTL、发布流程和已知兼容性边界。
-- [x] 补平台包内容校验。
-  当前已新增 `scripts/check_platform_packages.py`，并把 `package_smoke` 接到这层校验上；开发态默认校验 `os/cpu/files` 等 manifest 约定，发布态可通过 `--require-platform-binaries` 或现有 `bin/` 产物自动切换到严格模式，进一步校验 `npm/platforms/*/bin/` 和最终 tarball 内容。
-- [ ] 补发布辅助脚本。
-  当前发布仍需要人工串联改版本、运行 `npm/scripts/build.py`、再跑 `package_smoke --require-platform-binaries`，可以考虑补一个单入口脚本收敛这条链路。
+  当前 `docs/development.md` 已从 README 链出，覆盖项目分层、数据库目录约定、缓存目录/TTL、Python-only 发布流程和已知兼容性边界。
+- [x] 补 Python-only 发布辅助脚本。
+  当前已新增 `scripts/prepare_release.py`，可把 `unittest`、`compileall` 与最终 `package_smoke` 串成单入口，并支持 `--skip-*` 与 `--dry-run`。
+- [x] 清理历史发布残留。
+  旧的多平台 wrapper、平台包 manifest 与校验脚本已经从仓库中移除，避免文档、测试、CI 和源码包再次误接回旧发布链路。
+- [ ] 评估版本更新辅助脚本。
+  当前版本仍需手动改 `pyproject.toml` 和 `wechat_cli.__version__`；虽然已有对齐校验，但还没有统一的 bump/同步入口。
 
 ## 建议执行顺序
 
-1. 优先补发布辅助脚本，把版本校验、平台构建和严格 smoke 串成单入口。
-2. 然后根据发布体验决定是否补充更细的构建/发布检查，例如平台包内容清单或二进制元数据校验。
-3. 最后再按实际发布流程补充自动化发布或版本变更辅助脚本。
+1. 先评估版本更新辅助脚本，减少手工改版本号的发布摩擦。
+2. 然后视需要补充目标环境安装 smoke，进一步收紧发布前校验。
+3. 最后再考虑更完整的 Python 发布编排，例如 GitHub Release 资产校验。
