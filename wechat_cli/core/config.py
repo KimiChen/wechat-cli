@@ -18,6 +18,27 @@ else:
 STATE_DIR = os.path.expanduser("~/.wechat-cli")
 CONFIG_FILE = os.path.join(STATE_DIR, "config.json")
 KEYS_FILE = os.path.join(STATE_DIR, "all_keys.json")
+DEFAULT_DECRYPTED_CACHE_TTL_HOURS = 24
+
+
+def _coerce_nonnegative_int(value, default):
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        return default
+    return value if value >= 0 else default
+
+
+def _coerce_bool(value, default=False):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return default
 
 
 def _candidate_mtime(path):
@@ -187,6 +208,14 @@ def load_config(config_path=None):
     cfg.setdefault("decrypted_dir", os.path.join(state_dir, "decrypted"))
     cfg.setdefault("decoded_image_dir", os.path.join(state_dir, "decoded_images"))
     cfg.setdefault("wechat_process", _DEFAULT_PROCESS)
+    cfg["persist_decrypted_cache"] = _coerce_bool(
+        cfg.get("persist_decrypted_cache", False),
+        default=False,
+    )
+    cfg["decrypted_cache_ttl_hours"] = _coerce_nonnegative_int(
+        cfg.get("decrypted_cache_ttl_hours", DEFAULT_DECRYPTED_CACHE_TTL_HOURS),
+        default=DEFAULT_DECRYPTED_CACHE_TTL_HOURS,
+    )
 
     for key in ("db_dir", "keys_file", "decrypted_dir", "decoded_image_dir"):
         if key in cfg and not os.path.isabs(cfg[key]):

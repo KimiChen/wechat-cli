@@ -96,8 +96,7 @@ def search_contacts(cache, decrypted_dir, query="", limit=None):
     return matched
 
 
-def resolve_username(chat_name, cache, decrypted_dir):
-    names = get_contact_names(cache, decrypted_dir)
+def resolve_username_from_names(chat_name, names):
     if chat_name in names or chat_name.startswith("wxid_") or "@chatroom" in chat_name:
         return chat_name
 
@@ -109,6 +108,11 @@ def resolve_username(chat_name, cache, decrypted_dir):
         if chat_lower in display.lower():
             return username
     return None
+
+
+def resolve_username(chat_name, cache, decrypted_dir):
+    names = get_contact_names(cache, decrypted_dir)
+    return resolve_username_from_names(chat_name, names)
 
 
 def get_self_username(db_dir, cache, decrypted_dir):

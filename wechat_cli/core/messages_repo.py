@@ -66,6 +66,33 @@ def open_message_db(db_path):
     return closing(sqlite3.connect(db_path))
 
 
+def load_message_db_index(conn):
+    table_rows = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'Msg_%'"
+    ).fetchall()
+    table_names = [
+        table_name for (table_name,) in table_rows if is_safe_msg_table_name(table_name)
+    ]
+    table_name_set = set(table_names)
+
+    table_to_username = {}
+    try:
+        for (user_name,) in conn.execute("SELECT user_name FROM Name2Id").fetchall():
+            if not user_name:
+                continue
+            table_name = f"Msg_{hashlib.md5(user_name.encode()).hexdigest()}"
+            if table_name in table_name_set:
+                table_to_username[table_name] = user_name
+    except sqlite3.Error:
+        pass
+
+    return {
+        "table_names": table_names,
+        "table_name_set": table_name_set,
+        "table_to_username": table_to_username,
+    }
+
+
 def load_name2id_map(conn):
     id_to_username = {}
     try:
@@ -121,22 +148,11 @@ def query_messages(conn, table_name, start_ts=None, end_ts=None, keyword="", lim
 
 
 def load_search_contexts_from_db(conn, db_path, names):
-    table_rows = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'Msg_%'"
-    ).fetchall()
-    table_to_username = {}
-    try:
-        for (user_name,) in conn.execute("SELECT user_name FROM Name2Id").fetchall():
-            if not user_name:
-                continue
-            table_name = f"Msg_{hashlib.md5(user_name.encode()).hexdigest()}"
-            table_to_username[table_name] = user_name
-    except sqlite3.Error:
-        pass
+    db_index = load_message_db_index(conn)
 
     contexts = []
-    for (table_name,) in table_rows:
-        username = table_to_username.get(table_name, "")
+    for table_name in db_index["table_names"]:
+        username = db_index["table_to_username"].get(table_name, "")
         display_name = names.get(username, username) if username else table_name
         contexts.append(
             {
@@ -162,6 +178,21 @@ def _build_time_where(start_ts=None, end_ts=None):
         params.append(end_ts)
     where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
     return where_sql, params
+
+
+def query_table_max_create_times(conn, table_names):
+    results = {}
+    for table_name in table_names:
+        if not is_safe_msg_table_name(table_name):
+            raise ValueError(f"闈炴硶娑堟伅琛ㄥ悕: {table_name}")
+        try:
+            max_create_time = conn.execute(
+                f"SELECT MAX(create_time) FROM [{table_name}]"
+            ).fetchone()[0] or 0
+        except sqlite3.Error:
+            continue
+        results[table_name] = max_create_time
+    return results
 
 
 def query_type_counts(conn, table_name, start_ts=None, end_ts=None):

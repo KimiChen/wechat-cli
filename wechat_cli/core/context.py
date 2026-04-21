@@ -28,7 +28,15 @@ class AppContext:
         with open(self.keys_file, encoding="utf-8") as f:
             self.all_keys = strip_key_metadata(json.load(f))
 
-        self.cache = DBCache(self.all_keys, self.db_dir)
+        retention_seconds = None
+        if not self.cfg.get("persist_decrypted_cache"):
+            retention_seconds = self.cfg.get("decrypted_cache_ttl_hours", 24) * 3600
+
+        self.cache = DBCache(
+            self.all_keys,
+            self.db_dir,
+            retention_seconds=retention_seconds,
+        )
         atexit.register(self.cache.cleanup)
 
         self.msg_db_keys = find_msg_db_keys(self.all_keys)

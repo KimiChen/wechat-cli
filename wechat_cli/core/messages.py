@@ -1,5 +1,6 @@
 """消息查询 — 分表查找、分页、格式化"""
 
+import hashlib
 import os
 import re
 import xml.etree.ElementTree as ET
@@ -41,8 +42,164 @@ def _is_safe_msg_table_name(table_name):
     return messages_repo.is_safe_msg_table_name(table_name)
 
 
+def _get_state(cache):
+    state = getattr(cache, "_messages_state", None)
+    if state is None:
+        state = {"db_indexes": {}}
+        setattr(cache, "_messages_state", state)
+    return state
+
+
+def _describe_cached_message_db(rel_key, cache):
+    describe = getattr(cache, "describe", None)
+    if callable(describe):
+        info = describe(rel_key)
+        if info:
+            return info
+
+    path = cache.get(rel_key)
+    if not path:
+        return None
+
+    version_token = (path,)
+    if os.path.exists(path):
+        try:
+            version_token = (os.path.getmtime(path), os.path.getsize(path))
+        except OSError:
+            pass
+    return {
+        "path": path,
+        "db_mtime": None,
+        "wal_mtime": None,
+        "version_token": version_token,
+    }
+
+
+def _load_message_db_index(rel_key, cache):
+    info = _describe_cached_message_db(rel_key, cache)
+    if not info:
+        return None
+
+    state = _get_state(cache)
+    cached = state["db_indexes"].get(rel_key)
+    if (
+        cached
+        and cached["version_token"] == info["version_token"]
+        and cached["db_path"] == info["path"]
+    ):
+        return cached
+
+    with messages_repo.open_message_db(info["path"]) as conn:
+        db_index = messages_repo.load_message_db_index(conn)
+
+    cached = {
+        "db_path": info["path"],
+        "version_token": info["version_token"],
+        "table_names": list(db_index["table_names"]),
+        "table_name_set": set(db_index["table_name_set"]),
+        "table_to_username": dict(db_index["table_to_username"]),
+        "table_max_create_times": {},
+    }
+    state["db_indexes"][rel_key] = cached
+    return cached
+
+
+def _load_table_max_create_times(rel_key, cache, table_names):
+    db_index = _load_message_db_index(rel_key, cache)
+    if not db_index or not table_names:
+        return {}
+
+    missing = [
+        table_name
+        for table_name in table_names
+        if table_name not in db_index["table_max_create_times"]
+    ]
+    if missing:
+        with messages_repo.open_message_db(db_index["db_path"]) as conn:
+            max_times = messages_repo.query_table_max_create_times(conn, missing)
+        for table_name in missing:
+            db_index["table_max_create_times"][table_name] = max_times.get(table_name, 0)
+
+    return {
+        table_name: db_index["table_max_create_times"].get(table_name, 0)
+        for table_name in table_names
+    }
+
+
+def _build_search_contexts_from_index(db_index, names):
+    contexts = []
+    for table_name in db_index["table_names"]:
+        username = db_index["table_to_username"].get(table_name, "")
+        display_name = names.get(username, username) if username else table_name
+        contexts.append(
+            {
+                "query": display_name,
+                "username": username,
+                "display_name": display_name,
+                "db_path": db_index["db_path"],
+                "table_name": table_name,
+                "is_group": "@chatroom" in username,
+            }
+        )
+    return contexts
+
+
+def _find_msg_tables_for_users(usernames, msg_db_keys, cache):
+    results = {username: [] for username in usernames if username}
+    if not results:
+        return results
+
+    table_to_usernames = {}
+    for username in results:
+        table_name = f"Msg_{hashlib.md5(username.encode()).hexdigest()}"
+        if not _is_safe_msg_table_name(table_name):
+            continue
+        table_to_usernames.setdefault(table_name, []).append(username)
+
+    if not table_to_usernames:
+        return results
+
+    for rel_key in msg_db_keys:
+        try:
+            db_index = _load_message_db_index(rel_key, cache)
+        except Exception:
+            continue
+        if not db_index:
+            continue
+
+        matching_tables = [
+            table_name
+            for table_name in db_index["table_names"]
+            if table_name in table_to_usernames
+        ]
+        if not matching_tables:
+            continue
+
+        try:
+            max_times = _load_table_max_create_times(rel_key, cache, matching_tables)
+        except Exception:
+            continue
+
+        for table_name in matching_tables:
+            for username in table_to_usernames[table_name]:
+                results[username].append(
+                    {
+                        "db_path": db_index["db_path"],
+                        "table_name": table_name,
+                        "max_create_time": max_times.get(table_name, 0),
+                    }
+                )
+
+    for username in results:
+        results[username].sort(
+            key=lambda item: item["max_create_time"],
+            reverse=True,
+        )
+    return results
+
+
 def _find_msg_tables_for_user(username, msg_db_keys, cache):
-    return messages_repo.find_msg_tables_for_user(username, msg_db_keys, cache)
+    return _find_msg_tables_for_users([username], msg_db_keys, cache).get(username, [])
 
 
 # ---- 消息类型 ----
@@ -405,26 +562,43 @@ def validate_pagination(limit, offset=0, limit_max=_QUERY_LIMIT_MAX):
 
 # ---- 聊天上下文 ----
 
-def resolve_chat_context(chat_name, msg_db_keys, cache, decrypted_dir):
-    from .contacts import resolve_username, get_contact_names
-    username = resolve_username(chat_name, cache, decrypted_dir)
-    if not username:
-        return None
-    names = get_contact_names(cache, decrypted_dir)
+def _build_chat_context(query, username, names, message_tables):
     display_name = names.get(username, username)
-    message_tables = _find_msg_tables_for_user(username, msg_db_keys, cache)
     if not message_tables:
         return {
-            'query': chat_name, 'username': username, 'display_name': display_name,
-            'db_path': None, 'table_name': None, 'message_tables': [],
+            'query': query,
+            'username': username,
+            'display_name': display_name,
+            'db_path': None,
+            'table_name': None,
+            'message_tables': [],
             'is_group': '@chatroom' in username,
         }
+
     primary = message_tables[0]
     return {
-        'query': chat_name, 'username': username, 'display_name': display_name,
-        'db_path': primary['db_path'], 'table_name': primary['table_name'],
-        'message_tables': message_tables, 'is_group': '@chatroom' in username,
+        'query': query,
+        'username': username,
+        'display_name': display_name,
+        'db_path': primary['db_path'],
+        'table_name': primary['table_name'],
+        'message_tables': message_tables,
+        'is_group': '@chatroom' in username,
     }
+
+
+def resolve_chat_context(chat_name, msg_db_keys, cache, decrypted_dir, names=None):
+    from .contacts import get_contact_names, resolve_username_from_names
+
+    if names is None:
+        names = get_contact_names(cache, decrypted_dir)
+
+    username = resolve_username_from_names(chat_name, names)
+    if not username:
+        return None
+
+    message_tables = _find_msg_tables_for_user(username, msg_db_keys, cache)
+    return _build_chat_context(chat_name, username, names, message_tables)
 
 
 def _iter_table_contexts(ctx):
@@ -583,12 +757,12 @@ def search_all_messages(msg_db_keys, cache, names, keyword, display_name_fn, sta
     collected = []
     failures = []
     for rel_key in msg_db_keys:
-        path = cache.get(rel_key)
-        if not path:
-            continue
         try:
-            with messages_repo.open_message_db(path) as conn:
-                contexts = _load_search_contexts_from_db(conn, path, names)
+            db_index = _load_message_db_index(rel_key, cache)
+            if not db_index:
+                continue
+            contexts = _load_search_contexts_from_db(db_index, names)
+            with messages_repo.open_message_db(db_index['db_path']) as conn:
                 db_entries, db_failures = _collect_search_entries(
                     conn, contexts, names, keyword, display_name_fn,
                     start_ts=start_ts, end_ts=end_ts, candidate_limit=candidate_limit,
@@ -601,26 +775,40 @@ def search_all_messages(msg_db_keys, cache, names, keyword, display_name_fn, sta
     return collected, failures
 
 
-def _load_search_contexts_from_db(conn, db_path, names):
-    return messages_repo.load_search_contexts_from_db(conn, db_path, names)
+def _load_search_contexts_from_db(db_index, names):
+    return _build_search_contexts_from_index(db_index, names)
 
 
 # ---- 多聊天上下文解析 ----
 
 def resolve_chat_contexts(chat_names, msg_db_keys, cache, decrypted_dir):
+    from .contacts import get_contact_names, resolve_username_from_names
+
+    names = get_contact_names(cache, decrypted_dir)
     resolved = []
     unresolved = []
     missing_tables = []
     seen = set()
+    queries = []
     for chat_name in chat_names:
         name = (chat_name or '').strip()
         if not name:
             unresolved.append('(空)')
             continue
-        ctx = resolve_chat_context(name, msg_db_keys, cache, decrypted_dir)
-        if not ctx:
+        username = resolve_username_from_names(name, names)
+        if not username:
             unresolved.append(name)
             continue
+        queries.append((name, username))
+
+    tables_by_user = _find_msg_tables_for_users(
+        [username for _, username in queries],
+        msg_db_keys,
+        cache,
+    )
+
+    for query, username in queries:
+        ctx = _build_chat_context(query, username, names, tables_by_user.get(username, []))
         if not ctx['message_tables']:
             missing_tables.append(ctx['display_name'])
             continue
