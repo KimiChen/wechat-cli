@@ -174,7 +174,7 @@ def _format_app_message_text(content, local_type, is_group, chat_username, chat_
         quote_text = title or "[引用消息]"
         if ref_content:
             prefix = f"回复 {ref_display_name}: " if ref_display_name else "回复: "
-            quote_text += f"\n  ↳ {prefix}{ref_content}"
+            quote_text += f"\n  -> {prefix}{ref_content}"
         return quote_text
     if app_type == 6:
         # Try to resolve file path
@@ -730,6 +730,7 @@ def collect_chat_stats(ctx, names, display_name_fn, start_ts=None, end_ts=None):
     type_counts = {}
     sender_counts = {}
     hourly_counts = {}
+    failures = []
 
     for table_ctx in _iter_table_contexts(ctx):
         try:
@@ -774,8 +775,8 @@ def collect_chat_stats(ctx, names, display_name_fn, start_ts=None, end_ts=None):
                 ).fetchall():
                     if h is not None:
                         hourly_counts[h] = hourly_counts.get(h, 0) + cnt
-        except Exception:
-            pass
+        except Exception as e:
+            failures.append(f"{table_ctx['display_name']}: {e}")
 
     top_senders = sorted(sender_counts.items(), key=lambda x: x[1], reverse=True)[:10]
     top_senders = [{'name': display_name_fn(u, names), 'count': c} for u, c in top_senders]
@@ -787,4 +788,5 @@ def collect_chat_stats(ctx, names, display_name_fn, start_ts=None, end_ts=None):
         'type_breakdown': dict(sorted(type_counts.items(), key=lambda x: x[1], reverse=True)),
         'top_senders': top_senders,
         'hourly': hourly,
+        'failures': failures or None,
     }

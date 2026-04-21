@@ -7,7 +7,7 @@ import sys
 
 def _prepare_stream(file):
     file = file or sys.stdout
-    if os.name == "nt" and getattr(file, "isatty", lambda: False)():
+    if os.name == "nt" and file in (sys.stdout, sys.stderr):
         reconfigure = getattr(file, "reconfigure", None)
         if reconfigure:
             try:
@@ -29,6 +29,9 @@ def _write_text(file, text):
             buffer.write(data)
         else:
             file.write(data.decode(encoding, errors="replace"))
+    flush = getattr(file, "flush", None)
+    if flush:
+        flush()
 
 
 def output_json(data, file=None):
