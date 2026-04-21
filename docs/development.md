@@ -203,6 +203,7 @@
 python -m unittest discover -s tests -v
 python -m compileall wechat_cli tests scripts
 python scripts/check_release_metadata.py
+python scripts/check_platform_packages.py
 python scripts/package_smoke.py
 ```
 
@@ -214,8 +215,10 @@ python scripts/package_smoke.py
   主要用于快速发现语法错误和导入级问题。
 - `check_release_metadata.py`
   校验 Python 包版本、CLI 运行时版本、npm 主包、平台包和 `optionalDependencies` 是否一致。
+- `check_platform_packages.py`
+  校验 `npm/platforms/*` 的目录、`os/cpu/files` 声明，以及在严格模式下检查真实 `bin/wechat-cli(.exe)` 是否存在。
 - `package_smoke.py`
-  先跑 metadata 校验，再执行 `python -m build` 和 `npm pack`。
+  先跑 metadata 校验和平台包校验，再执行 `python -m build` 和 `npm pack`；如果检测到平台二进制，或显式传入 `--require-platform-binaries`，还会检查 tarball 中真的包含 `bin/wechat-cli(.exe)`。
 
 ## 发布流程
 
@@ -247,14 +250,36 @@ python scripts/package_smoke.py
 
 `package_smoke.py` 内部已经会调用 `check_release_metadata.py`，所以通常不需要单独重复跑一次 metadata 校验，除非你只想快速验证版本一致性。
 
-### 3. 发布前手动确认
+### 3. 构建平台包二进制
+
+平台 npm 包的真实二进制当前仍由发布前人工构建:
+
+```bash
+python npm/scripts/build.py darwin-arm64 darwin-x64 linux-arm64 linux-x64 win32-x64
+```
+
+构建后应再跑一次严格 smoke:
+
+```bash
+python scripts/package_smoke.py --require-platform-binaries
+```
+
+这一步会同时检查:
+
+- `npm/platforms/*/bin/` 下是否存在预期文件
+- `npm pack` 打出来的 tarball 是否真的包含 `package/bin/wechat-cli(.exe)`
+
+如果仓库里已经存在任意一个平台二进制，`package_smoke.py` 也会自动切到严格模式，避免只构建了部分平台时误发版。
+
+### 4. 发布前手动确认
 
 当前仓库里 `npm/platforms/*/` 主要维护的是 manifest。`package_smoke.py` 目前只保证:
 
-- npm manifest 可以 `pack`
-- 平台包名和版本号一致
+- 开发态下 npm manifest 可以 `pack`
+- 版本、包名、`os/cpu/files` 声明一致
+- 发布态下平台包 tarball 真的带上了二进制
 
-它还没有自动校验每个平台包的 `bin/` 内容是否存在、是否和 `os` / `cpu` 声明匹配。因此发布前仍建议手动确认平台包内容，这也是 TODO 里保留的下一项。
+仍然建议在真正发布前人工 spot-check 一次平台包内容，例如确认 PyInstaller 产物来自正确平台、可执行文件名没有意外变化，以及 wrapper 包在目标平台上能正常解析到对应二进制。
 
 ## 已知兼容性边界
 
@@ -269,6 +294,6 @@ python scripts/package_smoke.py
 
 如果继续沿 TODO 往下做，比较自然的顺序是:
 
-1. 补平台包 `bin/` 存在性和内容正确性的自动校验。
-2. 视发布体验决定是否把版本修改进一步自动化。
+1. 视发布体验决定是否把版本修改和平台构建进一步自动化成单入口。
+2. 如果未来平台包数量继续增加，可以补 tarball 内容清单或二进制元数据校验。
 3. 后续只要继续拆边界，优先沿用“命令层 -> 服务层 -> repo 层”的结构，不要把 SQL 和 Click 再重新耦合回去。

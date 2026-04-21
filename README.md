@@ -26,9 +26,9 @@
 
 ## 📥 安装
 
-需要 Python >= 3.10。
-
 ### 从源码安装
+
+需要 Python >= 3.10。
 
 ```bash
 git clone https://github.com/freestylefly/wechat-cli.git

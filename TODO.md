@@ -47,11 +47,13 @@
   当前已新增 GitHub Actions 工作流，覆盖跨平台 `compileall`、`unittest`，以及基于 `python -m build` + `npm pack` 的打包 smoke check；同时补了本地可复用的 `scripts/package_smoke.py` 入口，方便在发布前手动复跑。
 - [x] 补开发者文档。
   当前已新增 `docs/development.md` 并从 README 链出，覆盖项目分层、数据库目录约定、缓存目录/TTL、发布流程和已知兼容性边界。
-- [ ] 补平台包内容校验。
-  当前 `package_smoke` 只校验 manifest 对齐和 `npm pack` 可执行，尚未自动校验 `npm/platforms/*/bin/` 是否存在、是否与 `os` / `cpu` 声明匹配。
+- [x] 补平台包内容校验。
+  当前已新增 `scripts/check_platform_packages.py`，并把 `package_smoke` 接到这层校验上；开发态默认校验 `os/cpu/files` 等 manifest 约定，发布态可通过 `--require-platform-binaries` 或现有 `bin/` 产物自动切换到严格模式，进一步校验 `npm/platforms/*/bin/` 和最终 tarball 内容。
+- [ ] 补发布辅助脚本。
+  当前发布仍需要人工串联改版本、运行 `npm/scripts/build.py`、再跑 `package_smoke --require-platform-binaries`，可以考虑补一个单入口脚本收敛这条链路。
 
 ## 建议执行顺序
 
-1. 优先补平台包内容校验，把当前仍依赖人工确认的发布风险补上。
+1. 优先补发布辅助脚本，把版本校验、平台构建和严格 smoke 串成单入口。
 2. 然后根据发布体验决定是否补充更细的构建/发布检查，例如平台包内容清单或二进制元数据校验。
 3. 最后再按实际发布流程补充自动化发布或版本变更辅助脚本。
