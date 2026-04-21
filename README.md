@@ -24,29 +24,7 @@
 
 ---
 
-## 📥 安装（给人类看）
-
-AI Agent 请直接移步到“安装（给 Agent 看）”
-
-### npm（推荐）
-
-```bash
-npm install -g @canghe_ai/wechat-cli
-```
-
-> 目前提供 **macOS arm64** 二进制。其他平台可使用下方 pip 安装。欢迎提交其他平台二进制 PR。
-
-**更新到最新版本：**
-
-```bash
-npm update -g @canghe_ai/wechat-cli
-```
-
-### pip
-
-```bash
-pip install wechat-cli
-```
+## 📥 安装
 
 需要 Python >= 3.10。
 
@@ -59,20 +37,6 @@ pip install -e .
 ```
 
 ---
-
-## 📥 安装（给 Agent 看）
-
-直接将在你的 Claude Code 或者 OpenClaw 中输入以下提示即可：
-
-```bash
-帮我配置并安装：npm install -g @canghe_ai/wechat-cli
-```
-
-比如在 Claude Code 中输入：
-
-![install-claude-code-1](image/install-claude-code-1.png)
-
-注意：请先确保有 node.js 环境。没雨可以让你的 cc 安装环境。
 
 ## 🚀 快速开始
 
