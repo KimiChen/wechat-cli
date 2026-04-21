@@ -194,6 +194,55 @@ class OutputAndMessagesTests(unittest.TestCase):
         self.assertEqual(len(result["failures"]), 1)
         self.assertIn("Chat:", result["failures"][0])
 
+    def test_resolve_chat_contexts_ignores_expected_db_index_errors(self):
+        cache = FakeMessageCache({"message/message_1.db": "unused.db"})
+        with mock.patch(
+            "wechat_cli.core.contacts.get_contact_names",
+            return_value={"alice": "Alice"},
+        ):
+            with mock.patch(
+                "wechat_cli.core.contacts.resolve_username_from_names",
+                return_value="alice",
+            ):
+                with mock.patch.object(
+                    messages,
+                    "_load_message_db_index",
+                    side_effect=sqlite3.OperationalError("db is locked"),
+                ):
+                    resolved, unresolved, missing_tables = messages.resolve_chat_contexts(
+                        ["Alice"],
+                        ["message/message_1.db"],
+                        cache,
+                        "ignored",
+                    )
+
+        self.assertEqual(resolved, [])
+        self.assertEqual(unresolved, [])
+        self.assertEqual(missing_tables, ["Alice"])
+
+    def test_resolve_chat_contexts_propagates_unexpected_db_index_errors(self):
+        cache = FakeMessageCache({"message/message_1.db": "unused.db"})
+        with mock.patch(
+            "wechat_cli.core.contacts.get_contact_names",
+            return_value={"alice": "Alice"},
+        ):
+            with mock.patch(
+                "wechat_cli.core.contacts.resolve_username_from_names",
+                return_value="alice",
+            ):
+                with mock.patch.object(
+                    messages,
+                    "_load_message_db_index",
+                    side_effect=RuntimeError("unexpected bug"),
+                ):
+                    with self.assertRaisesRegex(RuntimeError, "unexpected bug"):
+                        messages.resolve_chat_contexts(
+                            ["Alice"],
+                            ["message/message_1.db"],
+                            cache,
+                            "ignored",
+                        )
+
     def test_resolve_chat_contexts_reuses_message_db_discovery_cache(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             rel_keys = [
@@ -399,6 +448,49 @@ class OutputAndMessagesTests(unittest.TestCase):
         self.assertNotIn("a.dat", text)
         self.assertNotIn("b.dat", text)
         self.assertIn("未精确到当前文件", text)
+
+    def test_media_resolution_falls_back_on_expected_os_errors(self):
+        with mock.patch.object(
+            messages,
+            "_resolve_media_reference",
+            side_effect=OSError("disk missing"),
+        ):
+            _, text = messages._format_message_text(
+                7,
+                3,
+                "placeholder",
+                False,
+                "alice",
+                "Alice",
+                {},
+                lambda username, names: username,
+                db_dir="C:/tmp/db_storage",
+                create_time_ts=_media_timestamp(),
+                resolve_media=True,
+            )
+
+        self.assertIn("[图片] 未定位到媒体文件", text)
+
+    def test_media_resolution_propagates_unexpected_errors(self):
+        with mock.patch.object(
+            messages,
+            "_resolve_media_reference",
+            side_effect=RuntimeError("unexpected media bug"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "unexpected media bug"):
+                messages._format_message_text(
+                    7,
+                    3,
+                    "placeholder",
+                    False,
+                    "alice",
+                    "Alice",
+                    {},
+                    lambda username, names: username,
+                    db_dir="C:/tmp/db_storage",
+                    create_time_ts=_media_timestamp(),
+                    resolve_media=True,
+                )
 
     def test_video_media_resolution_marks_thumbnail_fallback(self):
         with tempfile.TemporaryDirectory() as tmpdir:

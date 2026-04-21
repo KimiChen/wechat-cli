@@ -270,12 +270,12 @@ class DBCache:
                 if os.path.exists(wal_path):
                     decrypt_wal(wal_path, work_path, enc_key)
                 os.replace(work_path, tmp_path)
-            except Exception:
+            finally:
                 try:
-                    os.remove(work_path)
+                    if os.path.exists(work_path):
+                        os.remove(work_path)
                 except OSError:
                     pass
-                raise
 
             self._cache[rel_key] = (db_mtime, wal_mtime, tmp_path)
             self._save_persistent_cache()

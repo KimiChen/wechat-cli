@@ -168,6 +168,22 @@ class DBCacheTests(unittest.TestCase):
         self.assertEqual(second_path, cache_path)
         self.assertGreater(os.path.getmtime(second_path), old_ts)
 
+    def test_failed_decrypt_cleans_up_temp_work_file(self):
+        db_dir = os.path.join(self._tmpdir.name, "account", "db_storage")
+        _create_encrypted_db(db_dir)
+
+        cache = db_cache.DBCache(TEST_KEYS, db_dir)
+        with mock.patch.object(db_cache, "full_decrypt", side_effect=RuntimeError("decrypt failed")):
+            with mock.patch.object(db_cache, "decrypt_wal", return_value=0):
+                with self.assertRaisesRegex(RuntimeError, "decrypt failed"):
+                    cache.get(REL_KEY)
+
+        tmp_files = [
+            name for name in os.listdir(cache._namespace_dir)
+            if name.endswith(".tmp")
+        ]
+        self.assertEqual(tmp_files, [])
+
 
 if __name__ == "__main__":
     unittest.main()

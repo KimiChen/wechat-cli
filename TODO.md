@@ -17,7 +17,7 @@
 - [x] 明确 `new-messages` 的定位：它现在是 `session-updates` 的兼容别名，语义是“基于 session.db 的会话级更新流”。
 - [x] 梳理 `--media` 路径解析边界，区分精确路径、候选路径、候选目录和缩略图回退，并补回归测试。
 
-## P2 本轮已收尾
+## P2 已完成
 
 - [x] 避免 `dist/` 中旧 wheel / sdist 污染新的 release 构建。
   说明：`scripts/build_release_artifacts.py` 现在先在临时目录构建，再只同步当前版本产物到目标输出目录，清理旧发布产物但保留无关文件。
@@ -26,15 +26,15 @@
 - [x] 对齐 CI `compileall` 范围。
   说明：`.github/workflows/ci.yml` 现在与本地和 `scripts/prepare_release.py` 一致，统一检查 `wechat_cli`、`tests`、`scripts`。
 
-## P3 本轮已继续收尾
+## P3 已完成
 
 - [x] 清理历史残留与死代码。
   说明：根目录 `entry.py` 已删除，CLI 入口明确固定为 `pyproject.toml` 中的 `wechat_cli.main:cli`；`wechat_cli/core/messages_repo.py` 中未使用的旧辅助函数也已移除，并补了元数据回归校验。
 
-## P4 仍建议继续
+## P4 仍继续
 
-- [ ] 审核过宽的异常吞噬路径。
-  说明：重点看 `wechat_cli/core/messages.py`、`wechat_cli/core/db_cache.py` 中的 `except Exception: continue/pass`，评估是否要补更明确的失败上报。
+- [x] 审核并收紧 `messages.py` / `db_cache.py` 中过宽的异常吞噬路径。
+  说明：`messages.py` 现在只吞预期的数据库/媒体解析异常，避免把编程错误静默吃掉；`db_cache.py` 的临时文件清理改成 `finally` 路径，不再依赖 `except Exception` 做清理。
 - [ ] 继续补命令壳层测试。
   说明：可继续覆盖 `export` 异常分支、`history` 文本模式、帮助文本，以及其它用户可见错误提示。
 

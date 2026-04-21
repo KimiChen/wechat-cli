@@ -3,6 +3,7 @@
 import hashlib
 import os
 import re
+import sqlite3
 import xml.etree.ElementTree as ET
 from datetime import datetime
 
@@ -15,6 +16,9 @@ _XML_UNSAFE_RE = re.compile(r'<!DOCTYPE|<!ENTITY', re.IGNORECASE)
 _XML_PARSE_MAX_LEN = 20000
 _QUERY_LIMIT_MAX = 500
 _HISTORY_QUERY_BATCH_SIZE = 500
+_MESSAGE_DB_READ_ERRORS = (OSError, sqlite3.Error, TimeoutError)
+_MESSAGE_ROW_BUILD_ERRORS = (OSError, OverflowError, TypeError, ValueError, IndexError)
+_MEDIA_RESOLUTION_ERRORS = (OSError, OverflowError)
 
 # 消息类型过滤映射: 名称 -> (base_type,) 或 (base_type, sub_type)
 MSG_TYPE_FILTERS = {
@@ -162,7 +166,7 @@ def _find_msg_tables_for_users(usernames, msg_db_keys, cache):
     for rel_key in msg_db_keys:
         try:
             db_index = _load_message_db_index(rel_key, cache)
-        except Exception:
+        except _MESSAGE_DB_READ_ERRORS:
             continue
         if not db_index:
             continue
@@ -177,7 +181,7 @@ def _find_msg_tables_for_users(usernames, msg_db_keys, cache):
 
         try:
             max_times = _load_table_max_create_times(rel_key, cache, matching_tables)
-        except Exception:
+        except _MESSAGE_DB_READ_ERRORS:
             continue
 
         for table_name in matching_tables:
@@ -228,14 +232,11 @@ def format_msg_type(t):
 def decompress_content(content, ct):
     if ct and ct == 4 and isinstance(content, bytes):
         try:
-            return _zstd_dctx.decompress(content).decode('utf-8', errors='replace')
-        except Exception:
+            content = _zstd_dctx.decompress(content)
+        except zstd.ZstdError:
             return None
     if isinstance(content, bytes):
-        try:
-            return content.decode('utf-8', errors='replace')
-        except Exception:
-            return None
+        return content.decode('utf-8', errors='replace')
     return content
 
 
@@ -640,7 +641,7 @@ def _format_message_text(local_id, local_type, content, is_group, chat_username,
             media_reference = _resolve_media_reference(
                 db_dir, content, local_type, create_time_ts, chat_username
             )
-        except Exception:
+        except _MEDIA_RESOLUTION_ERRORS:
             media_reference = _media_resolution()
 
     if base_type == 3:
@@ -818,6 +819,14 @@ def _page_ranked_entries(entries, limit, offset):
     return paged
 
 
+def _format_row_failure(row, exc):
+    try:
+        local_id = row[0]
+    except (TypeError, IndexError):
+        return str(exc)
+    return f"local_id={local_id}: {exc}"
+
+
 # ---- 构建行 ----
 
 def _build_history_line(row, ctx, names, id_to_username, display_name_fn, resolve_media=False, db_dir=None):
@@ -882,13 +891,13 @@ def collect_chat_history(ctx, names, display_name_fn, start_ts=None, end_ts=None
                     for row in rows:
                         try:
                             collected.append(_build_history_line(row, table_ctx, names, id_to_username, display_name_fn, resolve_media=resolve_media, db_dir=db_dir))
-                        except Exception as e:
-                            failures.append(f"local_id={row[0]}: {e}")
+                        except _MESSAGE_ROW_BUILD_ERRORS as e:
+                            failures.append(_format_row_failure(row, e))
                         if len(collected) - before >= candidate_limit:
                             break
                     if len(rows) < batch_size:
                         break
-        except Exception as e:
+        except _MESSAGE_DB_READ_ERRORS as e:
             failures.append(f"{table_ctx['db_path']}: {e}")
 
     paged = _page_ranked_entries(collected, limit, offset)
@@ -913,14 +922,18 @@ def _collect_search_entries(conn, contexts, names, keyword, display_name_fn, sta
                     break
                 fetch_offset += len(rows)
                 for row in rows:
-                    formatted = _build_search_entry(row, ctx, names, id_to_username, display_name_fn)
+                    try:
+                        formatted = _build_search_entry(row, ctx, names, id_to_username, display_name_fn)
+                    except _MESSAGE_ROW_BUILD_ERRORS as e:
+                        failures.append(f"{ctx['display_name']}: {_format_row_failure(row, e)}")
+                        continue
                     if formatted:
                         collected.append(formatted)
                         if len(collected) - before >= candidate_limit:
                             break
                 if len(rows) < batch_size:
                     break
-        except Exception as e:
+        except _MESSAGE_DB_READ_ERRORS as e:
             failures.append(f"{ctx['display_name']}: {e}")
     return collected, failures
 
@@ -942,7 +955,7 @@ def collect_chat_search(ctx, names, keyword, display_name_fn, start_ts=None, end
                 )
                 collected.extend(db_entries)
                 failures.extend(db_failures)
-        except Exception as e:
+        except _MESSAGE_DB_READ_ERRORS as e:
             failures.extend(f"{tc['display_name']}: {e}" for tc in db_contexts)
     return collected, failures
 
@@ -953,9 +966,14 @@ def search_all_messages(msg_db_keys, cache, names, keyword, display_name_fn, sta
     for rel_key in msg_db_keys:
         try:
             db_index = _load_message_db_index(rel_key, cache)
-            if not db_index:
-                continue
-            contexts = _load_search_contexts_from_db(db_index, names)
+        except _MESSAGE_DB_READ_ERRORS as e:
+            failures.append(f"{rel_key}: {e}")
+            continue
+        if not db_index:
+            continue
+
+        contexts = _load_search_contexts_from_db(db_index, names)
+        try:
             with messages_repo.open_message_db(db_index['db_path']) as conn:
                 db_entries, db_failures = _collect_search_entries(
                     conn, contexts, names, keyword, display_name_fn,
@@ -964,7 +982,7 @@ def search_all_messages(msg_db_keys, cache, names, keyword, display_name_fn, sta
                 )
                 collected.extend(db_entries)
                 failures.extend(db_failures)
-        except Exception as e:
+        except _MESSAGE_DB_READ_ERRORS as e:
             failures.append(f"{rel_key}: {e}")
     return collected, failures
 
@@ -1070,7 +1088,7 @@ def collect_chat_stats(ctx, names, display_name_fn, start_ts=None, end_ts=None):
                 ):
                     if h is not None:
                         hourly_counts[h] = hourly_counts.get(h, 0) + cnt
-        except Exception as e:
+        except _MESSAGE_DB_READ_ERRORS as e:
             failures.append(f"{table_ctx['display_name']}: {e}")
 
     top_senders = sorted(sender_counts.items(), key=lambda x: x[1], reverse=True)[:10]
