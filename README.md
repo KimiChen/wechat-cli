@@ -35,13 +35,19 @@
 ```bash
 git clone <this-repo-url>
 cd wechat-cli
+```
+
+#### Windows PowerShell 安装命令
+```bash
 py -3.14 -m pip install -e .
-#Windows PowerShell 运行 Get-Command wechat-cli，查看PATH中是否有wechat-cli
 ```
 
 安装完成后，Windows PowerShell 里常见有 3 种运行方式：
 
 ```powershell
+# Windows PowerShell 运行 Get-Command wechat-cli
+Get-Command wechat-cli
+# 查看PATH中是否有 wechat-cli
 
 # 方式 1：如果 wechat-cli 已经在 PATH 中
 wechat-cli init
@@ -59,6 +65,26 @@ py -3.14 -m wechat_cli.main sessions --limit 10
 如果你已经执行了 `py -3.14 -m pip install -e .`，但 PowerShell 里提示找不到 `wechat-cli`，最稳妥的做法就是直接使用 `py -3.14 -m wechat_cli.main init`。
 
 下面 README 里所有 `wechat-cli init` 示例，在 PowerShell 中都可以按同样规则替换成 `py -3.14 -m wechat_cli.main init` 或 `.\.venv\Scripts\wechat-cli.exe init`。
+
+
+#### Mac 安装命令
+```bash
+# 1. 创建环境 (指定 3.14 版本)
+python3.14 -m venv venv
+
+# 2. 激活环境
+source venv/bin/activate
+
+# 3. 安装项目
+pip install -e .
+
+# 4. 需要先按照本文档后面的权限设置完方可执行
+sudo ./venv/bin/wechat-cli init
+
+wechat-cli init
+wechat-cli sessions --limit 10
+
+```
 
 ### 项目名、命令名、包名的区别
 
