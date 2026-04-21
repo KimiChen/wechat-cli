@@ -33,6 +33,7 @@ Thumbs.db
 *.db
 *.db-wal
 *.db-shm
+tests/*
 
 # Sensitive data — NEVER commit
 *.json
