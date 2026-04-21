@@ -103,6 +103,16 @@ class CommandRegressionTests(unittest.TestCase):
         self.assertIn("--end-time TEXT", result.output)
         self.assertIn("--limit INTEGER", result.output)
 
+    def test_subcommand_help_does_not_require_app_context(self):
+        with mock.patch("wechat_cli.main.AppContext", side_effect=AssertionError("should not load app context")):
+            history_result = self.runner.invoke(cli, ["history", "--help"])
+            export_result = self.runner.invoke(cli, ["export", "--help"])
+
+        self.assertEqual(history_result.exit_code, 0, history_result.output)
+        self.assertIn("--media", history_result.output)
+        self.assertEqual(export_result.exit_code, 0, export_result.output)
+        self.assertIn("--output TEXT", export_result.output)
+
     def test_cli_reports_expected_app_context_errors(self):
         with mock.patch("wechat_cli.main.AppContext", side_effect=OSError("keys file unreadable")):
             result = self.runner.invoke(cli, ["sessions"])

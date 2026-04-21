@@ -1,7 +1,6 @@
 """wechat-cli 入口"""
 
 import json
-import sys
 
 import click
 
@@ -10,6 +9,31 @@ from .core.context import AppContext
 
 
 _APP_CONTEXT_INIT_ERRORS = (OSError, json.JSONDecodeError)
+
+
+class _LazyAppContext:
+    """Defer AppContext creation until a command actually needs it."""
+
+    def __init__(self, config_path):
+        self._config_path = config_path
+        self._app = None
+
+    def _load(self):
+        if self._app is not None:
+            return self._app
+
+        try:
+            self._app = AppContext(self._config_path)
+        except FileNotFoundError as e:
+            click.echo(str(e), err=True)
+            raise click.exceptions.Exit(1)
+        except _APP_CONTEXT_INIT_ERRORS as e:
+            click.echo(f"初始化失败: {e}", err=True)
+            raise click.exceptions.Exit(1)
+        return self._app
+
+    def __getattr__(self, name):
+        return getattr(self._load(), name)
 
 
 @click.group()
@@ -36,14 +60,7 @@ def cli(ctx, config_path):
     if ctx.invoked_subcommand in ("init", "version"):
         return
 
-    try:
-        ctx.obj = AppContext(config_path)
-    except FileNotFoundError as e:
-        click.echo(str(e), err=True)
-        sys.exit(1)
-    except _APP_CONTEXT_INIT_ERRORS as e:
-        click.echo(f"初始化失败: {e}", err=True)
-        sys.exit(1)
+    ctx.obj = _LazyAppContext(config_path)
 
 
 # 注册子命令
