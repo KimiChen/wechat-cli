@@ -1,4 +1,4 @@
-"""配置加载 — 从 ~/.wechat-cli/ 读取自包含配置"""
+"""Configuration loading and auto-detection helpers."""
 
 import glob as glob_mod
 import json
@@ -15,25 +15,43 @@ elif _SYSTEM == "darwin":
 else:
     _DEFAULT_PROCESS = "Weixin.exe"
 
-# CLI 状态目录
 STATE_DIR = os.path.expanduser("~/.wechat-cli")
 CONFIG_FILE = os.path.join(STATE_DIR, "config.json")
 KEYS_FILE = os.path.join(STATE_DIR, "all_keys.json")
 
 
+def _candidate_mtime(path):
+    msg_dir = os.path.join(path, "message")
+    target = msg_dir if os.path.isdir(msg_dir) else path
+    try:
+        return os.path.getmtime(target)
+    except OSError:
+        return 0
+
+
+def _sort_candidates(candidates):
+    return sorted(candidates, key=_candidate_mtime, reverse=True)
+
+
 def _choose_candidate(candidates):
+    candidates = _sort_candidates(list(candidates))
     if len(candidates) == 1:
         return candidates[0]
     if len(candidates) > 1:
         if not sys.stdin.isatty():
             return candidates[0]
+
         print("[!] 检测到多个微信数据目录:")
-        for i, c in enumerate(candidates, 1):
-            print(f"    {i}. {c}")
+        for i, candidate in enumerate(candidates, 1):
+            print(f"    {i}. {candidate}")
         print("    0. 跳过")
+        print("    直接回车默认选择最近活跃的目录")
+
         try:
             while True:
                 choice = input(f"请选择 [0-{len(candidates)}]: ").strip()
+                if choice == "":
+                    return candidates[0]
                 if choice == "0":
                     return None
                 if choice.isdigit() and 1 <= int(choice) <= len(candidates):
@@ -41,7 +59,7 @@ def _choose_candidate(candidates):
                 print("    无效输入")
         except (EOFError, KeyboardInterrupt):
             print()
-            return None
+            return candidates[0]
     return None
 
 
@@ -50,6 +68,7 @@ def _auto_detect_db_dir_windows():
     config_dir = os.path.join(appdata, "Tencent", "xwechat", "config")
     if not os.path.isdir(config_dir):
         return None
+
     data_roots = []
     for ini_file in glob_mod.glob(os.path.join(config_dir, "*.ini")):
         try:
@@ -67,6 +86,7 @@ def _auto_detect_db_dir_windows():
                 data_roots.append(content)
         except OSError:
             continue
+
     seen = set()
     candidates = []
     for root in data_roots:
@@ -86,6 +106,7 @@ def _auto_detect_db_dir_linux():
     sudo_user = os.environ.get("SUDO_USER")
     if sudo_user:
         import pwd
+
         try:
             sudo_home = pwd.getpwnam(sudo_user).pw_dir
         except KeyError:
@@ -94,6 +115,7 @@ def _auto_detect_db_dir_linux():
             fallback = os.path.join(sudo_home, "Documents", "xwechat_files")
             if fallback not in search_roots:
                 search_roots.append(fallback)
+
     for root in search_roots:
         if not os.path.isdir(root):
             continue
@@ -103,20 +125,13 @@ def _auto_detect_db_dir_linux():
             if os.path.isdir(match) and normalized not in seen:
                 seen.add(normalized)
                 candidates.append(match)
+
     old_path = os.path.expanduser("~/.local/share/weixin/data/db_storage")
     if os.path.isdir(old_path):
         normalized = os.path.normcase(os.path.normpath(old_path))
         if normalized not in seen:
             candidates.append(old_path)
 
-    def _mtime(path):
-        msg_dir = os.path.join(path, "message")
-        target = msg_dir if os.path.isdir(msg_dir) else path
-        try:
-            return os.path.getmtime(target)
-        except OSError:
-            return 0
-    candidates.sort(key=_mtime, reverse=True)
     return _choose_candidate(candidates)
 
 
@@ -124,6 +139,7 @@ def _auto_detect_db_dir_macos():
     base = os.path.expanduser("~/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files")
     if not os.path.isdir(base):
         return None
+
     seen = set()
     candidates = []
     pattern = os.path.join(base, "*", "db_storage")
@@ -146,7 +162,7 @@ def auto_detect_db_dir():
 
 
 def load_config(config_path=None):
-    """加载配置。默认从 ~/.wechat-cli/config.json 读取。"""
+    """Load config, defaulting to ~/.wechat-cli/config.json."""
     if config_path is None:
         config_path = CONFIG_FILE
 
@@ -158,31 +174,24 @@ def load_config(config_path=None):
         except json.JSONDecodeError:
             cfg = {}
 
-    # db_dir 缺失时，自动检测
     db_dir = cfg.get("db_dir", "")
     if not db_dir:
         detected = auto_detect_db_dir()
         if detected:
             cfg["db_dir"] = detected
         else:
-            raise FileNotFoundError(
-                "未找到微信数据目录。\n"
-                "请运行: wechat-cli init"
-            )
+            raise FileNotFoundError("未找到微信数据目录。\n请运行 wechat-cli init")
 
-    # 设置默认值
     state_dir = os.path.dirname(os.path.abspath(config_path))
     cfg.setdefault("keys_file", os.path.join(state_dir, "all_keys.json"))
     cfg.setdefault("decrypted_dir", os.path.join(state_dir, "decrypted"))
     cfg.setdefault("decoded_image_dir", os.path.join(state_dir, "decoded_images"))
     cfg.setdefault("wechat_process", _DEFAULT_PROCESS)
 
-    # 所有路径确保为绝对路径
     for key in ("db_dir", "keys_file", "decrypted_dir", "decoded_image_dir"):
         if key in cfg and not os.path.isabs(cfg[key]):
             cfg[key] = os.path.join(state_dir, cfg[key])
 
-    # 推导微信数据根目录
     db_dir = cfg.get("db_dir", "")
     if db_dir and os.path.basename(db_dir) == "db_storage":
         cfg["wechat_base_dir"] = os.path.dirname(db_dir)
