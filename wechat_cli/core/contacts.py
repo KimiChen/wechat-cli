@@ -2,8 +2,12 @@
 
 import os
 import re
+import sqlite3
 
 from . import contacts_repo
+
+
+_CONTACT_DATASET_LOAD_ERRORS = (OSError, sqlite3.Error)
 
 
 def _get_state(cache):
@@ -62,7 +66,7 @@ def _load_contact_dataset(cache, decrypted_dir):
 
     try:
         dataset["names"], dataset["full"] = _load_contacts_from(db_path)
-    except Exception:
+    except _CONTACT_DATASET_LOAD_ERRORS:
         dataset["names"] = {}
         dataset["full"] = []
     return dataset["names"], dataset["full"]

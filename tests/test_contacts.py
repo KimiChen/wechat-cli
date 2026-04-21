@@ -2,6 +2,7 @@ import os
 import sqlite3
 import tempfile
 import unittest
+from unittest import mock
 
 from wechat_cli.core import contacts
 
@@ -115,6 +116,32 @@ class ContactsCacheTests(unittest.TestCase):
             )
 
         self.assertEqual(result, [{"username": "bob", "nick_name": "Bob", "remark": "Builder"}])
+
+    def test_contact_load_ignores_expected_db_errors(self):
+        cache = FakeCache("unused.db")
+        with mock.patch.object(
+            contacts,
+            "_load_contacts_from",
+            side_effect=sqlite3.OperationalError("db is locked"),
+        ):
+            self.assertEqual(
+                contacts.get_contact_names(cache, "missing"),
+                {},
+            )
+            self.assertEqual(
+                contacts.get_contact_full(cache, "missing"),
+                [],
+            )
+
+    def test_contact_load_propagates_unexpected_errors(self):
+        cache = FakeCache("unused.db")
+        with mock.patch.object(
+            contacts,
+            "_load_contacts_from",
+            side_effect=RuntimeError("unexpected contact bug"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "unexpected contact bug"):
+                contacts.get_contact_names(cache, "missing")
 
 
 if __name__ == "__main__":
