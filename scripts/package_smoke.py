@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Run lightweight packaging smoke checks for Python artifacts."""
 
+import hashlib
 import os
 import subprocess
 import sys
 import tempfile
+import tarfile
 import venv
 from pathlib import Path
+import zipfile
 
 from check_release_metadata import assert_release_metadata
 
@@ -76,6 +79,98 @@ def collect_python_artifacts(output_dir):
         )
 
     return artifacts
+
+
+def expected_artifact_names(version):
+    return {
+        "sdist": f"wechat_cli-{version}.tar.gz",
+        "wheel": f"wechat_cli-{version}-py3-none-any.whl",
+    }
+
+
+def validate_artifact_filenames(artifacts, version):
+    expected = expected_artifact_names(version)
+    for artifact_label, expected_name in expected.items():
+        actual_name = artifacts[artifact_label].name
+        if actual_name != expected_name:
+            raise RuntimeError(
+                "Python packaging smoke failed: unexpected artifact filename for "
+                f"{artifact_label}: {actual_name!r} != {expected_name!r}"
+            )
+
+
+def sha256_digest(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _required_sdist_members(version):
+    root = f"wechat_cli-{version}"
+    return {
+        f"{root}/README.md",
+        f"{root}/LICENSE",
+        f"{root}/pyproject.toml",
+        f"{root}/wechat_cli/__init__.py",
+        f"{root}/wechat_cli/main.py",
+        f"{root}/wechat_cli/bin/find_all_keys_macos.arm64",
+        f"{root}/wechat_cli/bin/find_all_keys_macos.c",
+        f"{root}/wechat_cli/commands/session_updates.py",
+        f"{root}/wechat_cli/core/session_updates.py",
+    }
+
+
+def _required_wheel_members(version):
+    dist_info = f"wechat_cli-{version}.dist-info"
+    return {
+        "wechat_cli/__init__.py",
+        "wechat_cli/main.py",
+        "wechat_cli/bin/find_all_keys_macos.arm64",
+        "wechat_cli/bin/find_all_keys_macos.c",
+        "wechat_cli/commands/session_updates.py",
+        "wechat_cli/core/session_updates.py",
+        f"{dist_info}/METADATA",
+        f"{dist_info}/WHEEL",
+        f"{dist_info}/entry_points.txt",
+        f"{dist_info}/top_level.txt",
+        f"{dist_info}/RECORD",
+        f"{dist_info}/licenses/LICENSE",
+    }
+
+
+def validate_sdist_members(members, version):
+    member_set = set(members)
+    missing = sorted(_required_sdist_members(version) - member_set)
+    if missing:
+        raise RuntimeError(
+            "Python packaging smoke failed: sdist is missing expected files: "
+            + ", ".join(missing)
+        )
+
+
+def validate_wheel_members(members, version):
+    member_set = set(members)
+    missing = sorted(_required_wheel_members(version) - member_set)
+    if missing:
+        raise RuntimeError(
+            "Python packaging smoke failed: wheel is missing expected files: "
+            + ", ".join(missing)
+        )
+
+
+def inspect_artifact_layouts(artifacts, version):
+    validate_artifact_filenames(artifacts, version)
+
+    with tarfile.open(artifacts["sdist"], "r:gz") as archive:
+        validate_sdist_members(archive.getnames(), version)
+
+    with zipfile.ZipFile(artifacts["wheel"]) as archive:
+        validate_wheel_members(archive.namelist(), version)
+
+    for artifact_label, artifact_path in artifacts.items():
+        print(f"[+] {artifact_label} sha256: {sha256_digest(artifact_path)}  {artifact_path.name}")
 
 
 def build_python_package(output_dir):
@@ -174,7 +269,9 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix="wechat-cli-package-smoke-") as tmpdir:
         tmp_root = Path(tmpdir)
+        expected_version = _read_expected_version()
         artifacts = build_python_package(tmp_root / "python")
+        inspect_artifact_layouts(artifacts, expected_version)
         run_install_smoke(artifacts, work_root=tmp_root, expected_version=_read_expected_version())
 
     print("[+] Python packaging smoke checks passed")

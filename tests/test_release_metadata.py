@@ -46,6 +46,7 @@ class ReleaseMetadataTests(unittest.TestCase):
             "session-updates",
             "bump_version.py",
             "安装 smoke",
+            "sha256",
             "package_smoke.py",
             "prepare_release.py",
         ):
@@ -54,6 +55,9 @@ class ReleaseMetadataTests(unittest.TestCase):
     def test_ci_package_smoke_is_python_only(self):
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertIn("Python Package Smoke", workflow)
+        self.assertIn('python-version:\n          - "3.10"', workflow)
+        self.assertIn('- "3.11"', workflow)
+        self.assertIn('- "3.12"', workflow)
         self.assertIn("python scripts/package_smoke.py", workflow)
         self.assertIn("python -m pip install build", workflow)
 

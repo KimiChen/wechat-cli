@@ -220,7 +220,7 @@ python scripts/prepare_release.py --dry-run
 - `bump_version.py`
   同步更新 `pyproject.toml` 与 `wechat_cli.__version__`，支持 `--dry-run`、`--print-current` 和在必要时用 `--allow-misaligned` 修复漂移。
 - `package_smoke.py`
-  先跑 release metadata 校验，再执行 `python -m build`，随后在临时虚拟环境里分别安装 wheel / sdist，并确认 `wechat-cli` 入口与模块导入都可用。
+  先跑 release metadata 校验，再执行 `python -m build`，校验 wheel / sdist 文件名与关键归档内容，打印 SHA256，随后在临时虚拟环境里分别安装 wheel / sdist，并确认 `wechat-cli` 入口与模块导入都可用。
 - `prepare_release.py`
   把 `unittest`、`compileall` 和 `package_smoke` 串成单入口；支持 `--skip-tests`、`--skip-compileall`、`--skip-package-smoke` 与 `--dry-run`。
 
@@ -263,7 +263,7 @@ python -m compileall wechat_cli tests scripts
 python scripts/package_smoke.py
 ```
 
-`package_smoke.py` 内部已经会调用 `check_release_metadata.py`，并继续做“构建 + 目标环境安装 smoke”，所以通常不需要单独重复跑一次 metadata 校验，除非你只想快速验证版本一致性。
+`package_smoke.py` 内部已经会调用 `check_release_metadata.py`，并继续做“构建 + 产物内容/sha256 校验 + 目标环境安装 smoke”，所以通常不需要单独重复跑一次 metadata 校验，除非你只想快速验证版本一致性。
 
 ### 3. 推荐单入口
 
@@ -297,8 +297,10 @@ python scripts/prepare_release.py --skip-package-smoke
 
 - README、开发文档和 CI 仍然保持 Python-only 安装/发布口径。
 - 如需手动产出发布物，可额外执行 `python -m build`，再在目标环境里试装 sdist / wheel。
-- 当前 `package_smoke.py` 已包含目标环境安装 smoke：它会在临时虚拟环境中安装 wheel / sdist，并校验 `wechat-cli --version`、`wechat-cli --help` 与模块导入。
-- 如果你还想进一步提高发布把关强度，可以再加一层更贴近真实用户环境的 smoke，例如全新机器或 matrix 环境下的安装验证。
+- 当前 `package_smoke.py` 已包含发布产物内容校验：它会检查 wheel / sdist 文件名、关键归档成员，并打印每个产物的 SHA256。
+- 当前 `package_smoke.py` 也包含目标环境安装 smoke：它会在临时虚拟环境中安装 wheel / sdist，并校验 `wechat-cli --version`、`wechat-cli --help` 与模块导入。
+- GitHub Actions 当前也会在 Python `3.10`、`3.11`、`3.12` 上重复执行 package smoke，覆盖最小支持版本到当前主力版本的安装链路。
+- 如果你还想进一步提高发布把关强度，可以再加一层更贴近真实用户环境的 smoke，例如 GitHub Release 资产校验或更多 Python 版本矩阵。
 
 ## 已知兼容性边界
 
@@ -314,5 +316,5 @@ python scripts/prepare_release.py --skip-package-smoke
 如果继续沿 TODO 往下做，比较自然的顺序是:
 
 1. 版本同步脚本现在已经补齐；如果后续还要继续减少手工步骤，可以再考虑把 changelog / Git tag / GitHub Release 资产检查串进同一条发布辅助链路。
-2. 如果未来还想继续收紧发布校验，可以补更细的发布产物检查，例如 GitHub Release 资产、哈希或多 Python 版本安装验证。
+2. 如果未来还想继续收紧发布校验，可以补更细的发布产物检查，例如 GitHub Release 资产或更多 Python 版本矩阵。
 3. 后续只要继续拆边界，优先沿用“命令层 -> 服务层 -> repo 层”的结构，不要把 SQL 和 Click 再重新耦合回去。
