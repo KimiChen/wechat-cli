@@ -62,6 +62,23 @@ py -3.14 -m wechat_cli.main sessions --limit 10
 
 下面 README 里所有 `wechat-cli init` 示例，在 PowerShell 中都可以按同样规则替换成 `py -3.14 -m wechat_cli.main init` 或 `.\.venv\Scripts\wechat-cli.exe init`。
 
+### 项目名、命令名、包名的区别
+
+这 3 个名字看起来很像，但用途不同：
+
+- 仓库目录 / 项目名可以叫 `wechat-cli`
+- 终端命令名是 `wechat-cli`
+- Python 包目录和导入名必须是 `wechat_cli`
+
+所以在 PowerShell 里你会看到下面两种都合理：
+
+```powershell
+wechat-cli sessions --limit 10
+py -3.14 -m wechat_cli.main sessions --limit 10
+```
+
+不要把 Python 包目录改成 `wechat-cli`，因为 `-` 不是合法的 Python 模块名。
+
 ---
 
 ## 🚀 快速开始
