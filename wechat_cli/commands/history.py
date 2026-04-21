@@ -2,6 +2,7 @@
 
 import click
 
+from ..core.command_result import build_collection_result
 from ..core.contacts import get_contact_names
 from ..core.messages import (
     MSG_TYPE_FILTERS,
@@ -60,19 +61,23 @@ def history(ctx, chat_name, limit, offset, start_time, end_time, fmt, msg_type, 
     )
 
     if fmt == 'json':
-        output({
-            'chat': chat_ctx['display_name'],
-            'username': chat_ctx['username'],
-            'is_group': chat_ctx['is_group'],
-            'count': len(lines),
-            'offset': offset,
-            'limit': limit,
-            'start_time': start_time or None,
-            'end_time': end_time or None,
-            'type': msg_type or None,
-            'messages': lines,
-            'failures': failures if failures else None,
-        }, 'json')
+        output(
+            build_collection_result(
+                chat_ctx['display_name'],
+                'messages',
+                lines,
+                limit=limit,
+                offset=offset,
+                failures=failures,
+                chat=chat_ctx['display_name'],
+                username=chat_ctx['username'],
+                is_group=chat_ctx['is_group'],
+                start_time=start_time or None,
+                end_time=end_time or None,
+                type=msg_type or None,
+            ),
+            'json',
+        )
     else:
         header = f"{chat_ctx['display_name']} 的消息记录（返回 {len(lines)} 条，offset={offset}, limit={limit}）"
         if chat_ctx['is_group']:

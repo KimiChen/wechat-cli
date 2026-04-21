@@ -5,6 +5,7 @@ import os
 
 import click
 
+from ..core.command_result import build_collection_result
 from ..core.config import STATE_DIR
 from ..core.contacts import get_contact_names
 from ..core.session_data import (
@@ -77,7 +78,16 @@ def new_messages(ctx, fmt):
             )
 
         if fmt == "json":
-            output({"first_call": True, "unread_count": len(unread_msgs), "messages": unread_msgs}, "json")
+            output(
+                build_collection_result(
+                    "当前未读会话",
+                    "messages",
+                    unread_msgs,
+                    first_call=True,
+                    unread_count=len(unread_msgs),
+                ),
+                "json",
+            )
             return
 
         if unread_msgs:
@@ -113,7 +123,16 @@ def new_messages(ctx, fmt):
     new_msgs.sort(key=lambda item: item["timestamp"])
 
     if fmt == "json":
-        output({"first_call": False, "new_count": len(new_msgs), "messages": new_msgs}, "json")
+        output(
+            build_collection_result(
+                "新消息",
+                "messages",
+                new_msgs,
+                first_call=False,
+                new_count=len(new_msgs),
+            ),
+            "json",
+        )
         return
 
     if not new_msgs:

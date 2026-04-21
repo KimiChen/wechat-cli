@@ -2,6 +2,7 @@
 
 import click
 
+from ..core.command_result import build_collection_result
 from ..core.contacts import get_contact_names, get_group_members, resolve_username
 from ..output.formatter import output
 
@@ -29,13 +30,15 @@ def members(ctx, group_name, fmt):
 
     if fmt == "json":
         output(
-            {
-                "group": display_name,
-                "username": username,
-                "member_count": len(result["members"]),
-                "owner": result["owner"],
-                "members": result["members"],
-            },
+            build_collection_result(
+                display_name,
+                "members",
+                result["members"],
+                group=display_name,
+                username=username,
+                owner=result["owner"],
+                member_count=len(result["members"]),
+            ),
             "json",
         )
         return

@@ -2,6 +2,7 @@
 
 import click
 
+from ..core.command_result import build_collection_result
 from ..core.contacts import get_contact_names
 from ..core.session_data import SessionDBError, query_session_rows, session_row_to_entry
 from ..output.formatter import output
@@ -25,7 +26,16 @@ def unread(ctx, limit, fmt):
     results = [session_row_to_entry(row, names) for row in rows]
 
     if fmt == "json":
-        output(results, "json")
+        output(
+            build_collection_result(
+                "未读会话",
+                "sessions",
+                results,
+                limit=limit,
+                offset=0,
+            ),
+            "json",
+        )
         return
 
     if not results:

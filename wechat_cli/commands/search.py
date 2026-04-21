@@ -2,6 +2,7 @@
 
 import click
 
+from ..core.command_result import build_collection_result
 from ..core.contacts import get_contact_names
 from ..core.messages import (
     MSG_TYPE_FILTERS,
@@ -120,18 +121,18 @@ def search(ctx, keyword, chat, start_time, end_time, limit, offset, fmt, msg_typ
 
     if fmt == "json":
         output(
-            {
-                "scope": scope,
-                "keyword": keyword,
-                "count": len(paged),
-                "offset": offset,
-                "limit": limit,
-                "start_time": start_time or None,
-                "end_time": end_time or None,
-                "type": msg_type or None,
-                "results": [item[1] for item in paged],
-                "failures": failures if failures else None,
-            },
+            build_collection_result(
+                scope,
+                "results",
+                [item[1] for item in paged],
+                limit=limit,
+                offset=offset,
+                failures=failures,
+                keyword=keyword,
+                start_time=start_time or None,
+                end_time=end_time or None,
+                type=msg_type or None,
+            ),
             "json",
         )
         return

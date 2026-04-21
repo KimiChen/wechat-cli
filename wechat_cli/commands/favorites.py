@@ -2,6 +2,7 @@
 
 import click
 
+from ..core.command_result import build_collection_result
 from ..core.contacts import get_contact_names
 from ..core.favorites import (
     FAVORITE_TYPE_FILTERS,
@@ -46,10 +47,18 @@ def favorites(ctx, limit, fav_type, query, fmt):
         ctx.exit(3)
 
     if fmt == 'json':
-        output({
-            'count': len(results),
-            'favorites': results,
-        }, 'json')
+        output(
+            build_collection_result(
+                "收藏",
+                "favorites",
+                results,
+                limit=limit,
+                offset=0,
+                type=fav_type or None,
+                query=query or None,
+            ),
+            'json',
+        )
     else:
         if not results:
             output("没有找到收藏", 'text')

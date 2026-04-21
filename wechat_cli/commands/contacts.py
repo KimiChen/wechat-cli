@@ -2,6 +2,7 @@
 
 import click
 
+from ..core.command_result import build_collection_result, build_result
 from ..core.contacts import find_contact_detail, search_contacts
 from ..output.formatter import output
 
@@ -35,7 +36,17 @@ def contacts(ctx, query, detail, limit, fmt):
     )
 
     if fmt == 'json':
-        output(matched, 'json')
+        output(
+            build_collection_result(
+                f"联系人搜索: {query}" if query else "全部联系人",
+                "contacts",
+                matched,
+                limit=limit,
+                offset=0,
+                query=query or None,
+            ),
+            'json',
+        )
     else:
         header = f"找到 {len(matched)} 个联系人:"
         lines = []
@@ -56,7 +67,15 @@ def _show_detail(app, name_or_id, fmt):
         return
 
     if fmt == 'json':
-        output(info, 'json')
+        output(
+            build_result(
+                "联系人详情",
+                count=1,
+                query=name_or_id,
+                contact=info,
+            ),
+            'json',
+        )
     else:
         lines = [f"联系人详情: {info['nick_name']}"]
         if info['remark']:

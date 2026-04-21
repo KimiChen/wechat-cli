@@ -21,8 +21,8 @@
   `sessions`、`unread`、`new-messages` 的重复 `session.db` 查询与基础格式化逻辑已经集中到 `wechat_cli/core/session_data.py`。
 - [x] 为 `contacts`、`messages`、`favorites` 建立更清晰的 repository/query 边界。
   目前 `contacts_repo`、`messages_repo`、`favorites_repo` 已承接 SQL 和 DB 路径解析，`commands/` 侧只保留参数、错误处理和输出编排。
-- [ ] 统一命令返回结构和失败模型。
-  可以继续收敛 `failures`、`count`、`scope`、分页字段等约定，方便 CLI 和后续 Agent 调用。
+- [x] 统一命令返回结构和失败模型。
+  已新增共享 `command_result` 包装层，`sessions`、`unread`、`contacts`、`favorites`、`history`、`search`、`stats`、`members`、`new-messages` 的 JSON 输出现在统一包含 `scope`、`count`、`failures`，分页命令统一包含 `offset/limit`。
 
 ## P2 提升缓存可靠性、性能和行为定义
 
@@ -50,6 +50,6 @@
 
 ## 建议执行顺序
 
-1. 继续完成 `P1` 里尚未统一的 repository/query 边界和命令返回模型。
-2. 然后推进 `P2`，优先明确缓存保留策略与 `new-messages` 的真实语义。
+1. 继续推进 `P2`，优先明确解密后数据库的保留策略与 `new-messages` 的真实语义。
+2. 然后处理消息库发现/搜索优化，以及媒体路径解析边界，让性能和行为定义更稳。
 3. 最后补齐 `P3` 的 CI、版本对齐和开发文档，让发布与协作成本降下来。

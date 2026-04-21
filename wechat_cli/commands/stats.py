@@ -2,6 +2,7 @@
 
 import click
 
+from ..core.command_result import build_result
 from ..core.contacts import get_contact_names
 from ..core.messages import collect_chat_stats, parse_time_range, resolve_chat_context
 from ..output.formatter import output
@@ -41,13 +42,20 @@ def stats(ctx, chat_name, start_time, end_time, fmt):
     )
 
     if fmt == "json":
+        payload = dict(result)
+        failures = payload.pop("failures", None)
         output(
-            {
-                "chat": chat_ctx["display_name"],
-                "username": chat_ctx["username"],
-                "is_group": chat_ctx["is_group"],
-                **result,
-            },
+            build_result(
+                chat_ctx["display_name"],
+                count=result["total"],
+                failures=failures,
+                chat=chat_ctx["display_name"],
+                username=chat_ctx["username"],
+                is_group=chat_ctx["is_group"],
+                start_time=start_time or None,
+                end_time=end_time or None,
+                **payload,
+            ),
             "json",
         )
         return
