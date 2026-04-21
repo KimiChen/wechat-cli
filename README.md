@@ -4,13 +4,10 @@
 
 **命令行查询本地微信数据，专为 AI 集成设计。**
 
-[![npm version](https://img.shields.io/npm/v/@canghe_ai/wechat-cli.svg)](https://www.npmjs.com/package/@canghe_ai/wechat-cli)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)](https://github.com/freestylefly/wechat-cli)
 
 聊天记录 · 联系人 · 会话 · 收藏 · 统计 · 导出
-
-[English](README.md)
 
 </div>
 
@@ -374,7 +371,3 @@ wechat-cli new-messages                    # 后续: 仅返回上次以来的新
 本项目基于 [wechat-decrypt](https://github.com/ylytdeng/wechat-decrypt) 开发，该仓库提供了微信数据库解密和数据解析的核心能力。
 
 ---
-
-## ⭐ Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=freestylefly/wechat-cli&type=Date)](https://star-history.com/#freestylefly/wechat-cli&Date)
