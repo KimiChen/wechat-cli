@@ -45,6 +45,7 @@ class ReleaseMetadataTests(unittest.TestCase):
             "decrypted_cache_ttl_hours",
             "session-updates",
             "bump_version.py",
+            "安装 smoke",
             "package_smoke.py",
             "prepare_release.py",
         ):

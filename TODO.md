@@ -53,9 +53,11 @@
   旧的多平台 wrapper、平台包 manifest 与校验脚本已经从仓库中移除，避免文档、测试、CI 和源码包再次误接回旧发布链路。
 - [x] 补版本更新辅助脚本。
   当前已新增 `scripts/bump_version.py`，可同步更新 `pyproject.toml` 与 `wechat_cli.__version__`，并支持 `--dry-run`、`--print-current` 与 `--allow-misaligned`。
+- [x] 补目标环境安装 smoke。
+  当前 `scripts/package_smoke.py` 已在构建后自动创建临时虚拟环境，分别安装 wheel / sdist，并校验 `wechat-cli` 入口和模块导入可用，避免“能 build 但装完跑不起来”的回归。
 
 ## 建议执行顺序
 
-1. 先补目标环境安装 smoke，进一步收紧发布前校验。
-2. 然后再考虑更完整的 Python 发布编排，例如 GitHub Release 资产校验。
-3. 最后视实际维护成本决定是否补 changelog / tag / release 说明的自动化串联。
+1. 先考虑更细的发布产物校验，例如 GitHub Release 资产、哈希或多 Python 版本安装验证。
+2. 然后再考虑更完整的 Python 发布编排，例如 changelog、tag 和 release 说明的自动化串联。
+3. 最后再视实际维护成本决定是否把本地发布辅助脚本和 CI 做更紧密的统一编排。
