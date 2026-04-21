@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import tarfile
 import sys
@@ -51,11 +52,12 @@ class PackageSmokeTests(unittest.TestCase):
     def test_sha256_digest_matches_known_content(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "demo.txt"
-            path.write_text("wechat-cli\n", encoding="utf-8")
+            content = b"wechat-cli\n"
+            path.write_bytes(content)
 
             self.assertEqual(
                 package_smoke.sha256_digest(path),
-                "9c9f0d997a6ff50b1de6629ab4c10dff931a4c01c8c67500c9a22fcf062b6822",
+                hashlib.sha256(content).hexdigest(),
             )
 
     def test_validate_sdist_members_requires_expected_files(self):
