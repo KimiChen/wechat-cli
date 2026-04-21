@@ -18,6 +18,8 @@ wechat-cli = "wechat_cli.main:cli"
 
 [tool.setuptools.packages.find]
 where = ["."]
+include = ["wechat_cli*"]
+namespaces = true
 
 [tool.setuptools.package-data]
 wechat_cli = ["bin/*"]
