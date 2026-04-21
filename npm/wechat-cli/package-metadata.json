@@ -1,0 +1,10 @@
+{
+  "root_package": "@canghe_ai/wechat-cli",
+  "platform_packages": {
+    "darwin-arm64": "@canghe_ai/wechat-cli-darwin-arm64",
+    "darwin-x64": "@canghe_ai/wechat-cli-darwin-x64",
+    "linux-x64": "@canghe_ai/wechat-cli-linux-x64",
+    "linux-arm64": "@canghe_ai/wechat-cli-linux-arm64",
+    "win32-x64": "@canghe_ai/wechat-cli-win32-x64"
+  }
+}

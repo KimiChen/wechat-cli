@@ -4,13 +4,12 @@ import sys
 
 import click
 
+from . import __version__
 from .core.context import AppContext
-
-_VERSION = "0.2.4"
 
 
 @click.group()
-@click.version_option(version=_VERSION, prog_name="wechat-cli")
+@click.version_option(version=__version__, prog_name="wechat-cli")
 @click.option("--config", "config_path", default=None, envvar="WECHAT_CLI_CONFIG",
               help="config.json 路径（默认自动查找）")
 @click.pass_context

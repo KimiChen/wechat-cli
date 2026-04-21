@@ -2,21 +2,16 @@
 'use strict';
 
 const fs = require('fs');
-const path = require('path');
-
-const PLATFORM_PACKAGES = {
-  'darwin-arm64': '@canghe_ai/wechat-cli-darwin-arm64',
-  'darwin-x64':   '@canghe_ai/wechat-cli-darwin-x64',
-  'linux-x64':    '@canghe_ai/wechat-cli-linux-x64',
-  'linux-arm64':  '@canghe_ai/wechat-cli-linux-arm64',
-  'win32-x64':    '@canghe_ai/wechat-cli-win32-x64',
-};
+const metadata = require('./package-metadata.json');
+const PLATFORM_PACKAGES = metadata.platform_packages;
+const ROOT_PACKAGE = metadata.root_package;
 
 const platformKey = `${process.platform}-${process.arch}`;
 const pkg = PLATFORM_PACKAGES[platformKey];
 
 if (!pkg) {
-  console.log(`wechat-cli: no binary for ${platformKey}, skipping`);
+  console.log(`wechat-cli: no published binary package for ${platformKey}, skipping postinstall`);
+  console.log(`wechat-cli: wrapper package is ${ROOT_PACKAGE}`);
   process.exit(0);
 }
 
@@ -31,6 +26,7 @@ try {
   }
 } catch {
   // Platform package was not installed (npm --no-optional or unsupported)
-  console.log(`wechat-cli: platform package ${pkg} not installed`);
-  console.log('To fix: npm install --force @canghe_ai/wechat-cli');
+  console.log(`wechat-cli: optional platform package ${pkg} was not installed for ${platformKey}`);
+  console.log(`wechat-cli: this usually means npm skipped optionalDependencies for ${ROOT_PACKAGE}`);
+  console.log(`wechat-cli: reinstall the wrapper package, for example: npm install -g --force ${ROOT_PACKAGE}`);
 }

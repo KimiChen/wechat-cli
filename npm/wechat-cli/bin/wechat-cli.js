@@ -3,14 +3,9 @@
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-
-const PLATFORM_PACKAGES = {
-  'darwin-arm64': '@canghe_ai/wechat-cli-darwin-arm64',
-  'darwin-x64': '@canghe_ai/wechat-cli-darwin-x64',
-  'linux-x64': '@canghe_ai/wechat-cli-linux-x64',
-  'linux-arm64': '@canghe_ai/wechat-cli-linux-arm64',
-  'win32-x64': '@canghe_ai/wechat-cli-win32-x64',
-};
+const metadata = require('../package-metadata.json');
+const PLATFORM_PACKAGES = metadata.platform_packages;
+const ROOT_PACKAGE = metadata.root_package;
 
 const platformKey = `${process.platform}-${process.arch}`;
 const ext = process.platform === 'win32' ? '.exe' : '';
@@ -23,6 +18,8 @@ function getBinaryPath() {
   const pkg = PLATFORM_PACKAGES[platformKey];
   if (!pkg) {
     console.error(`wechat-cli: unsupported platform ${platformKey}`);
+    console.error(`Published wrapper package: ${ROOT_PACKAGE}`);
+    console.error(`Supported platforms: ${Object.keys(PLATFORM_PACKAGES).join(', ')}`);
     process.exit(1);
   }
 
@@ -41,8 +38,9 @@ function getBinaryPath() {
   } catch {}
 
   console.error(`wechat-cli: binary not found for ${platformKey}`);
-  console.error(`Missing platform package: ${pkg}`);
-  console.error('Try: npm install --force @canghe_ai/wechat-cli');
+  console.error(`Expected optional dependency: ${pkg}`);
+  console.error(`Reinstall the wrapper package so npm can fetch the matching binary: ${ROOT_PACKAGE}`);
+  console.error(`Example: npm install -g --force ${ROOT_PACKAGE}`);
   process.exit(1);
 }
 

@@ -39,17 +39,19 @@
 
 ## P3 补工程化和发布链路
 
-- [ ] 对齐 Python 包、npm 主包和各平台包版本号。
-  需要避免发布链路里的版本漂移，让安装和排障信息保持一致。
-- [ ] 修正 npm wrapper 里的错误提示与包名文案。
-  安装失败时给出的提示应该准确反映真实发布包名，减少用户排障摩擦。
+- [x] 对齐 Python 包、npm 主包和各平台包版本号。
+  当前已把 Python CLI 版本收敛到 `wechat_cli.__version__`，并新增 `scripts/check_release_metadata.py` 校验 `pyproject.toml`、npm 主包、平台包和可选依赖版本是否一致；`package_smoke` 也会先跑这层校验，避免发布前版本漂移。
+- [x] 修正 npm wrapper 里的错误提示与包名文案。
+  当前 npm wrapper 已共享 `package-metadata.json` 中的主包名与平台包映射，`install.js` 和 `bin/wechat-cli.js` 的错误提示会明确指向真实发布包 `@canghe_ai/wechat-cli`，README 里的 npm 安装命令也已改成显式包名。
 - [x] 增加基础 CI。
   当前已新增 GitHub Actions 工作流，覆盖跨平台 `compileall`、`unittest`，以及基于 `python -m build` + `npm pack` 的打包 smoke check；同时补了本地可复用的 `scripts/package_smoke.py` 入口，方便在发布前手动复跑。
-- [ ] 补开发者文档。
-  建议覆盖项目分层、数据库目录约定、缓存目录、发布流程和已知兼容性边界。
+- [x] 补开发者文档。
+  当前已新增 `docs/development.md` 并从 README 链出，覆盖项目分层、数据库目录约定、缓存目录/TTL、发布流程和已知兼容性边界。
+- [ ] 补平台包内容校验。
+  当前 `package_smoke` 只校验 manifest 对齐和 `npm pack` 可执行，尚未自动校验 `npm/platforms/*/bin/` 是否存在、是否与 `os` / `cpu` 声明匹配。
 
 ## 建议执行顺序
 
-1. 优先处理版本对齐与 npm wrapper 文案，减少发布链路里的版本漂移和排障摩擦。
-2. 然后补开发者文档，沉淀当前分层、缓存与发布流程约定。
-3. 最后根据发布体验决定是否补充更细的构建/发布检查，例如平台二进制存在性校验。
+1. 优先补平台包内容校验，把当前仍依赖人工确认的发布风险补上。
+2. 然后根据发布体验决定是否补充更细的构建/发布检查，例如平台包内容清单或二进制元数据校验。
+3. 最后再按实际发布流程补充自动化发布或版本变更辅助脚本。

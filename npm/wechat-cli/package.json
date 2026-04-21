@@ -10,7 +10,8 @@
   },
   "files": [
     "bin/",
-    "install.js"
+    "install.js",
+    "package-metadata.json"
   ],
   "optionalDependencies": {
     "@canghe_ai/wechat-cli-darwin-arm64": "0.2.4",

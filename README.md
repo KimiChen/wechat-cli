@@ -15,7 +15,7 @@
 
 ## ✨ 功能亮点
 
-- **🚀 开箱即用** — `npm install -g` 一键安装，无需 Python
+
 - **📦 11 个命令** — sessions、history、search、contacts、members、stats、export、favorites、unread、session-updates、init
 - **🤖 AI 优先** — 默认 JSON 输出，专为 LLM Agent 工具调用设计
 - **🔒 全程本地** — SQLCipher 即时解密，数据不出本机
@@ -312,6 +312,14 @@ wechat-cli session-updates                 # 后续: 仅返回上次以来有变
 1. **提取密钥** — 扫描微信进程内存获取加密密钥（`init`）
 2. **即时解密** — 透明页级 AES-256-CBC 解密，带缓存
 3. **本地查询** — 所有数据留在本机，无需网络访问
+
+---
+
+## 🛠️ 开发者文档
+
+如果你在继续重构、补测试或准备发布，请先看 [docs/development.md](docs/development.md)。
+
+这份文档记录了当前项目分层、微信目录约定、缓存行为、发布检查脚本和已知兼容性边界。
 
 ---
 

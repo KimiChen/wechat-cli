@@ -7,6 +7,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from check_release_metadata import assert_release_metadata
 
 ROOT = Path(__file__).resolve().parents[1]
 NPM_ROOT = ROOT / "npm"
@@ -86,6 +87,8 @@ def pack_npm_packages(output_dir, npm_executable):
 
 def main():
     npm_executable = _require_tool("npm")
+    assert_release_metadata()
+    print("[+] Release metadata is aligned")
 
     with tempfile.TemporaryDirectory(prefix="wechat-cli-package-smoke-") as tmpdir:
         tmp_root = Path(tmpdir)
