@@ -32,11 +32,18 @@ class ReleaseMetadataTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn("pip install -e .", readme)
         self.assertIn("Python 3.14", readme)
+        self.assertIn("py -3.14 -m wechat_cli.main init", readme)
+        self.assertIn("py -3.14 -m wechat_cli.main sessions --limit 10", readme)
 
     def test_readme_links_developer_guide(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn("docs/development.md", readme)
         self.assertTrue((ROOT / "docs" / "development.md").exists())
+
+    def test_cli_entrypoint_uses_package_module(self):
+        pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        self.assertIn('wechat-cli = "wechat_cli.main:cli"', pyproject)
+        self.assertFalse((ROOT / "entry.py").exists())
 
     def test_pyproject_requires_python_3_14_only(self):
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
