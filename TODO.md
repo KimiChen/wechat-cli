@@ -26,10 +26,13 @@
 - [x] 对齐 CI `compileall` 范围。
   说明：`.github/workflows/ci.yml` 现在与本地和 `scripts/prepare_release.py` 一致，统一检查 `wechat_cli`、`tests`、`scripts`。
 
-## P3 仍建议继续
+## P3 本轮已继续收尾
 
-- [ ] 清理历史残留与死代码。
-  说明：确认 `entry.py` 是否还需要保留，并检查 `wechat_cli/core/messages_repo.py` 中可能未使用的辅助函数。
+- [x] 清理历史残留与死代码。
+  说明：根目录 `entry.py` 已删除，CLI 入口明确固定为 `pyproject.toml` 中的 `wechat_cli.main:cli`；`wechat_cli/core/messages_repo.py` 中未使用的旧辅助函数也已移除，并补了元数据回归校验。
+
+## P4 仍建议继续
+
 - [ ] 审核过宽的异常吞噬路径。
   说明：重点看 `wechat_cli/core/messages.py`、`wechat_cli/core/db_cache.py` 中的 `except Exception: continue/pass`，评估是否要补更明确的失败上报。
 - [ ] 继续补命令壳层测试。
