@@ -27,41 +27,6 @@ def is_safe_msg_table_name(table_name):
     return bool(_MESSAGE_TABLE_RE.fullmatch(table_name))
 
 
-def find_msg_tables_for_user(username, msg_db_keys, cache):
-    table_name = f"Msg_{hashlib.md5(username.encode()).hexdigest()}"
-    if not is_safe_msg_table_name(table_name):
-        return []
-
-    matches = []
-    for rel_key in msg_db_keys:
-        db_path = cache.get(rel_key)
-        if not db_path:
-            continue
-        with closing(sqlite3.connect(db_path)) as conn:
-            try:
-                exists = conn.execute(
-                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
-                    (table_name,),
-                ).fetchone()
-                if not exists:
-                    continue
-                max_create_time = conn.execute(
-                    f"SELECT MAX(create_time) FROM [{table_name}]"
-                ).fetchone()[0] or 0
-                matches.append(
-                    {
-                        "db_path": db_path,
-                        "table_name": table_name,
-                        "max_create_time": max_create_time,
-                    }
-                )
-            except Exception:
-                continue
-
-    matches.sort(key=lambda item: item["max_create_time"], reverse=True)
-    return matches
-
-
 def open_message_db(db_path):
     return closing(sqlite3.connect(db_path))
 
