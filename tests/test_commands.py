@@ -286,6 +286,89 @@ class CommandRegressionTests(unittest.TestCase):
         self.assertEqual(payload["failures"], ["partial"])
         self.assertEqual(payload["messages"], ["[Team] hello"])
 
+    def test_history_text_mode_includes_group_marker_time_range_and_failures(self):
+        chat_ctx = {
+            "display_name": "Team",
+            "username": "room@chatroom",
+            "is_group": True,
+            "db_path": "team.db",
+            "table_name": "Msg_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "message_tables": [{"db_path": "team.db", "table_name": "Msg_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
+            "query": "Team",
+        }
+        with mock.patch.object(history_cmd, "validate_pagination", return_value=None):
+            with mock.patch.object(history_cmd, "parse_time_range", return_value=(100, 200)):
+                with mock.patch.object(history_cmd, "resolve_chat_context", return_value=chat_ctx):
+                    with mock.patch.object(history_cmd, "get_contact_names", return_value={}):
+                        with mock.patch.object(
+                            history_cmd,
+                            "collect_chat_history",
+                            return_value=(["[Team] hello"], ["partial"]),
+                        ):
+                            result = self.runner.invoke(
+                                history_cmd.history,
+                                [
+                                    "Team",
+                                    "--format",
+                                    "text",
+                                    "--start-time",
+                                    "2026-04-01",
+                                    "--end-time",
+                                    "2026-04-02",
+                                ],
+                                obj=self.app,
+                            )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("Team 的消息记录", result.output)
+        self.assertIn("[群聊]", result.output)
+        self.assertIn("时间范围: 2026-04-01 ~ 2026-04-02", result.output)
+        self.assertIn("查询失败: partial", result.output)
+        self.assertIn("[Team] hello", result.output)
+
+    def test_history_text_mode_reports_empty_history(self):
+        chat_ctx = {
+            "display_name": "Alice",
+            "username": "alice",
+            "is_group": False,
+            "db_path": "alice.db",
+            "table_name": "Msg_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "message_tables": [{"db_path": "alice.db", "table_name": "Msg_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
+            "query": "Alice",
+        }
+        with mock.patch.object(history_cmd, "validate_pagination", return_value=None):
+            with mock.patch.object(history_cmd, "parse_time_range", return_value=(None, None)):
+                with mock.patch.object(history_cmd, "resolve_chat_context", return_value=chat_ctx):
+                    with mock.patch.object(history_cmd, "get_contact_names", return_value={}):
+                        with mock.patch.object(
+                            history_cmd,
+                            "collect_chat_history",
+                            return_value=([], None),
+                        ):
+                            result = self.runner.invoke(
+                                history_cmd.history,
+                                ["Alice", "--format", "text"],
+                                obj=self.app,
+                            )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("Alice 无消息记录", result.output)
+
+    def test_history_reports_invalid_pagination_with_exit_code_2(self):
+        with mock.patch.object(
+            history_cmd,
+            "validate_pagination",
+            side_effect=ValueError("limit must be positive"),
+        ):
+            result = self.runner.invoke(
+                history_cmd.history,
+                ["Alice", "--limit", "0"],
+                obj=self.app,
+            )
+
+        self.assertEqual(result.exit_code, 2, result.output)
+        self.assertIn("limit must be positive", result.output)
+
     def test_unread_json_uses_standard_result_shape(self):
         rows = [
             ("room@chatroom", 2, "hello", 1_700_000_000, 1, "alice", ""),
@@ -354,6 +437,81 @@ class CommandRegressionTests(unittest.TestCase):
             self.assertIn("[04-01 10:00] Alice: hello", content)
             self.assertTrue(content.endswith("\n"))
             self.assertIn("chat.md", result.output)
+
+    def test_export_reports_invalid_time_range_with_exit_code_2(self):
+        with mock.patch.object(export_cmd, "validate_pagination", return_value=None):
+            with mock.patch.object(
+                export_cmd,
+                "parse_time_range",
+                side_effect=ValueError("bad time range"),
+            ):
+                result = self.runner.invoke(
+                    export_cmd.export,
+                    ["Team", "--start-time", "bad"],
+                    obj=self.app,
+                )
+
+        self.assertEqual(result.exit_code, 2, result.output)
+        self.assertIn("bad time range", result.output)
+
+    def test_export_reports_missing_chat_with_exit_code_1(self):
+        with mock.patch.object(export_cmd, "validate_pagination", return_value=None):
+            with mock.patch.object(export_cmd, "parse_time_range", return_value=(None, None)):
+                with mock.patch.object(export_cmd, "resolve_chat_context", return_value=None):
+                    result = self.runner.invoke(
+                        export_cmd.export,
+                        ["Unknown"],
+                        obj=self.app,
+                    )
+
+        self.assertEqual(result.exit_code, 1, result.output)
+        self.assertIn("找不到聊天对象: Unknown", result.output)
+
+    def test_export_reports_missing_message_history_with_exit_code_1(self):
+        chat_ctx = {
+            "display_name": "Alice",
+            "username": "alice",
+            "is_group": False,
+            "db_path": None,
+        }
+        with mock.patch.object(export_cmd, "validate_pagination", return_value=None):
+            with mock.patch.object(export_cmd, "parse_time_range", return_value=(None, None)):
+                with mock.patch.object(export_cmd, "resolve_chat_context", return_value=chat_ctx):
+                    result = self.runner.invoke(
+                        export_cmd.export,
+                        ["Alice"],
+                        obj=self.app,
+                    )
+
+        self.assertEqual(result.exit_code, 1, result.output)
+        self.assertIn("找不到 Alice 的消息记录", result.output)
+
+    def test_export_reports_empty_history_without_writing_output(self):
+        chat_ctx = {
+            "display_name": "Alice",
+            "username": "alice",
+            "is_group": False,
+            "db_path": "alice.db",
+        }
+        with self.runner.isolated_filesystem():
+            with mock.patch.object(export_cmd, "validate_pagination", return_value=None):
+                with mock.patch.object(export_cmd, "parse_time_range", return_value=(None, None)):
+                    with mock.patch.object(export_cmd, "resolve_chat_context", return_value=chat_ctx):
+                        with mock.patch.object(export_cmd, "get_contact_names", return_value={}):
+                            with mock.patch.object(
+                                export_cmd,
+                                "collect_chat_history",
+                                return_value=([], None),
+                            ):
+                                result = self.runner.invoke(
+                                    export_cmd.export,
+                                    ["Alice", "--output", "chat.txt"],
+                                    obj=self.app,
+                                )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertIn("Alice 无消息记录", result.output)
+            self.assertFalse(Path("chat.txt").exists())
 
     def test_init_reports_missing_auto_detected_db_dir(self):
         with self.runner.isolated_filesystem():
