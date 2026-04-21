@@ -275,7 +275,301 @@ def _parse_int(value, fallback=0):
         return fallback
 
 
-def _format_app_message_text(content, local_type, is_group, chat_username, chat_display_name, names, _display_name_fn, resolve_media=False, db_dir=None, create_time_ts=0):
+def _media_resolution(status="unresolved", paths=None, note=""):
+    return {
+        "status": status,
+        "paths": list(paths or []),
+        "note": note,
+    }
+
+
+def _list_directory_files(directory, exclude_suffixes=()):
+    if not os.path.isdir(directory):
+        return []
+    files = []
+    try:
+        names = sorted(os.listdir(directory))
+    except OSError:
+        return []
+    for name in names:
+        if any(name.endswith(suffix) for suffix in exclude_suffixes):
+            continue
+        path = os.path.join(directory, name)
+        if os.path.isfile(path):
+            files.append(path)
+    return files
+
+
+def _list_directory_dirs(directory):
+    if not os.path.isdir(directory):
+        return []
+    dirs = []
+    try:
+        names = sorted(os.listdir(directory))
+    except OSError:
+        return []
+    for name in names:
+        path = os.path.join(directory, name)
+        if os.path.isdir(path):
+            dirs.append(path)
+    return dirs
+
+
+def _find_fuzzy_file_matches(directory, title):
+    normalized_title = (title or "").strip().lower()
+    if not normalized_title:
+        return []
+    normalized_title_stem = os.path.splitext(normalized_title)[0]
+
+    matches = []
+    for path in _list_directory_files(directory):
+        filename = os.path.basename(path).lower()
+        filename_stem = os.path.splitext(filename)[0]
+        if (
+            normalized_title in filename
+            or filename in normalized_title
+            or (
+                normalized_title_stem
+                and (
+                    normalized_title_stem in filename_stem
+                    or filename_stem in normalized_title_stem
+                )
+            )
+        ):
+            matches.append(path)
+    return matches
+
+
+def _resolve_file_media_reference(msg_dir, date_prefix, title):
+    if not title:
+        return _media_resolution()
+
+    file_dir = os.path.join(msg_dir, "file", date_prefix)
+    if not os.path.isdir(file_dir):
+        return _media_resolution()
+
+    exact_path = os.path.join(file_dir, title)
+    if os.path.isfile(exact_path):
+        return _media_resolution(
+            status="exact_file",
+            paths=[exact_path],
+        )
+
+    fuzzy_matches = _find_fuzzy_file_matches(file_dir, title)
+    if len(fuzzy_matches) == 1:
+        return _media_resolution(
+            status="candidate_file",
+            paths=fuzzy_matches,
+            note="文件名启发式匹配，可能不是当前消息对应文件",
+        )
+    if len(fuzzy_matches) > 1:
+        return _media_resolution(
+            status="candidate_directory",
+            paths=[file_dir],
+            note=f"该月份目录下有 {len(fuzzy_matches)} 个近似文件名候选",
+        )
+
+    return _media_resolution()
+
+
+def _resolve_attach_media_reference(msg_dir, date_prefix, chat_username, sub_dir_name):
+    attach_dir = os.path.join(msg_dir, "attach")
+    if not os.path.isdir(attach_dir):
+        return _media_resolution()
+
+    if chat_username:
+        hashed_dir = hashlib.md5(chat_username.encode()).hexdigest()
+        exact_bucket = os.path.join(attach_dir, hashed_dir, date_prefix, sub_dir_name)
+        if os.path.isdir(exact_bucket):
+            return _media_resolution(
+                status="candidate_directory",
+                paths=[exact_bucket],
+                note="已按聊天对象和月份定位目录，未精确到当前文件",
+            )
+
+    bucket_dirs = []
+    for attach_subdir in _list_directory_dirs(attach_dir):
+        bucket_dir = os.path.join(attach_subdir, date_prefix, sub_dir_name)
+        if os.path.isdir(bucket_dir):
+            bucket_dirs.append(bucket_dir)
+
+    if len(bucket_dirs) == 1:
+        return _media_resolution(
+            status="candidate_directory",
+            paths=bucket_dirs,
+            note="仅按月份扫描得到单个候选目录，未精确到当前文件",
+        )
+    if len(bucket_dirs) > 1:
+        return _media_resolution(
+            status="ambiguous_directories",
+            paths=bucket_dirs,
+            note=f"同月份发现 {len(bucket_dirs)} 个候选目录",
+        )
+
+    return _media_resolution()
+
+
+def _resolve_video_thumbnail_reference(msg_dir, date_prefix):
+    video_dir = os.path.join(msg_dir, "video", date_prefix)
+    if not os.path.isdir(video_dir):
+        return _media_resolution()
+
+    thumb_paths = [
+        path
+        for path in _list_directory_files(video_dir)
+        if path.endswith("_thumb.jpg")
+    ]
+    if len(thumb_paths) == 1:
+        return _media_resolution(
+            status="thumbnail",
+            paths=thumb_paths,
+            note="未定位到原视频，仅找到缩略图",
+        )
+    if len(thumb_paths) > 1:
+        return _media_resolution(
+            status="candidate_directory",
+            paths=[video_dir],
+            note=f"该月份目录下有 {len(thumb_paths)} 个视频缩略图候选",
+        )
+
+    return _media_resolution()
+
+
+def _resolve_media_reference(db_dir, content, local_type, create_time_ts, chat_username=None):
+    """尝试解析媒体文件在磁盘上的路径或候选目录。"""
+    if not db_dir or not create_time_ts:
+        return _media_resolution()
+
+    base_type = local_type & 0xFFFFFFFF
+    wechat_base = os.path.dirname(db_dir)
+    msg_dir = os.path.join(wechat_base, "msg")
+    if not os.path.isdir(msg_dir):
+        return _media_resolution()
+
+    from datetime import datetime
+
+    dt = datetime.fromtimestamp(create_time_ts)
+    date_prefix = dt.strftime("%Y-%m")
+
+    if base_type == 49 and content:
+        root = _parse_xml_root(content)
+        if root is None:
+            return _media_resolution()
+        appmsg = root.find('.//appmsg')
+        if appmsg is None:
+            return _media_resolution()
+        app_type = _parse_int((appmsg.findtext('type') or '').strip())
+        if app_type != 6:
+            return _media_resolution()
+        title = (appmsg.findtext('title') or '').strip()
+        return _resolve_file_media_reference(msg_dir, date_prefix, title)
+
+    if base_type == 3:
+        return _resolve_attach_media_reference(
+            msg_dir, date_prefix, chat_username, "Img"
+        )
+
+    if base_type == 34:
+        return _resolve_attach_media_reference(
+            msg_dir, date_prefix, chat_username, "Voice"
+        )
+
+    if base_type == 43:
+        attach_resolution = _resolve_attach_media_reference(
+            msg_dir, date_prefix, chat_username, "Video"
+        )
+        if attach_resolution["status"] != "unresolved":
+            return attach_resolution
+        return _resolve_video_thumbnail_reference(msg_dir, date_prefix)
+
+    return _media_resolution()
+
+
+def _format_candidate_paths(paths, max_paths=3):
+    if not paths:
+        return ""
+    shown = paths[:max_paths]
+    lines = [f"  {path}" for path in shown]
+    remaining = len(paths) - len(shown)
+    if remaining > 0:
+        lines.append(f"  ... 另有 {remaining} 个候选目录")
+    return "\n".join(lines)
+
+
+def _format_media_message_text(label, resolution, local_id=None):
+    resolution = resolution or _media_resolution()
+    status = resolution["status"]
+    paths = resolution["paths"]
+    note = resolution["note"]
+
+    if status == "exact_file" and paths:
+        return f"[{label}] {paths[0]}"
+    if status == "candidate_file" and paths:
+        text = f"[{label}] 候选路径: {paths[0]}"
+        if note:
+            text += f" ({note})"
+        return text
+    if status == "candidate_directory" and paths:
+        text = f"[{label}] 候选目录: {paths[0]}"
+        if note:
+            text += f" ({note})"
+        return text
+    if status == "thumbnail" and paths:
+        text = f"[{label}] 缩略图候选: {paths[0]}"
+        if note:
+            text += f" ({note})"
+        return text
+    if status == "ambiguous_directories":
+        text = f"[{label}] 未精确定位媒体文件"
+        if note:
+            text += f"（{note}）"
+        candidate_lines = _format_candidate_paths(paths)
+        if candidate_lines:
+            text += "\n" + candidate_lines
+        return text
+
+    text = f"[{label}] 未定位到媒体文件"
+    if local_id is not None:
+        text += f" (local_id={local_id})"
+    return text
+
+
+def _format_file_message_text(title, resolution):
+    resolution = resolution or _media_resolution()
+    prefix = f"[文件] {title}" if title else "[文件]"
+    status = resolution["status"]
+    paths = resolution["paths"]
+    note = resolution["note"]
+
+    if status == "exact_file" and paths:
+        return f"{prefix}\n  {paths[0]}"
+    if status == "candidate_file" and paths:
+        text = f"{prefix}\n  候选路径: {paths[0]}"
+        if note:
+            text += f"\n  说明: {note}"
+        return text
+    if status == "candidate_directory" and paths:
+        text = f"{prefix}\n  候选目录: {paths[0]}"
+        if note:
+            text += f"\n  说明: {note}"
+        return text
+    if status == "ambiguous_directories":
+        text = f"{prefix}\n  未精确定位媒体文件"
+        if note:
+            text += f"（{note}）"
+        candidate_lines = _format_candidate_paths(paths)
+        if candidate_lines:
+            text += "\n" + candidate_lines
+        return text
+    if status == "thumbnail" and paths:
+        text = f"{prefix}\n  缩略图候选: {paths[0]}"
+        if note:
+            text += f"\n  说明: {note}"
+        return text
+    return prefix
+
+
+def _format_app_message_text(content, local_type, is_group, chat_username, chat_display_name, names, _display_name_fn, resolve_media=False, db_dir=None, create_time_ts=0, media_reference=None):
     if not content or '<appmsg' not in content:
         return None
     _, sub_type = _split_msg_type(local_type)
@@ -303,23 +597,11 @@ def _format_app_message_text(content, local_type, is_group, chat_username, chat_
             quote_text += f"\n  -> {prefix}{ref_content}"
         return quote_text
     if app_type == 6:
-        # Try to resolve file path
-        if resolve_media and db_dir:
-            msg_dir = os.path.join(os.path.dirname(db_dir), "msg", "file")
-            if title and os.path.isdir(msg_dir):
-                from datetime import datetime as _dt
-                dt = _dt.fromtimestamp(create_time_ts) if create_time_ts else None
-                if dt:
-                    file_dir = os.path.join(msg_dir, dt.strftime("%Y-%m"))
-                    if os.path.isdir(file_dir):
-                        target = os.path.join(file_dir, title)
-                        if os.path.isfile(target):
-                            return f"[文件] {title}\n  {target}"
-                        # Fuzzy match
-                        for f in os.listdir(file_dir):
-                            if title in f or f in title:
-                                return f"[文件] {title}\n  {os.path.join(file_dir, f)}"
-        return f"[文件] {title}" if title else "[文件]"
+        if resolve_media and media_reference is None:
+            media_reference = _resolve_media_reference(
+                db_dir, content, local_type, create_time_ts, chat_username
+            )
+        return _format_file_message_text(title, media_reference)
     if app_type == 5:
         return f"[链接] {title}" if title else "[链接]"
     if app_type in (33, 36, 44):
@@ -348,117 +630,28 @@ def _format_voip_message_text(content):
     return f"[通话] {status_map.get(raw_text, raw_text)}"
 
 
-def _resolve_media_path(db_dir, content, local_type, create_time_ts, chat_username=None):
-    """尝试解析媒体文件在磁盘上的路径。
-
-    Args:
-        db_dir: 微信 db_storage 目录
-        content: 解压后的 message_content
-        local_type: 消息类型
-        create_time_ts: 消息时间戳
-        chat_username: 聊天对象 username（用于定位 attach 子目录）
-
-    Returns:
-        (path, exists) 元组，path 为 None 表示无法解析
-    """
-    base_type = local_type & 0xFFFFFFFF
-    wechat_base = os.path.dirname(db_dir)
-    msg_dir = os.path.join(wechat_base, "msg")
-    if not os.path.isdir(msg_dir):
-        return None, False
-
-    from datetime import datetime
-    dt = datetime.fromtimestamp(create_time_ts)
-    date_prefix = dt.strftime("%Y-%m")
-
-    # 文件消息 (type 49, sub 6): msg/file/YYYY-MM/filename
-    if base_type == 49 and content:
-        root = _parse_xml_root(content)
-        if root is not None:
-            appmsg = root.find('.//appmsg')
-            if appmsg is not None:
-                app_type = _parse_int((appmsg.findtext('type') or '').strip())
-                if app_type == 6:
-                    title = (appmsg.findtext('title') or '').strip()
-                    if title:
-                        file_dir = os.path.join(msg_dir, "file", date_prefix)
-                        if os.path.isdir(file_dir):
-                            # 精确匹配文件名
-                            target = os.path.join(file_dir, title)
-                            if os.path.isfile(target):
-                                return target, True
-                            # 模糊匹配（文件名可能有细微差异）
-                            for f in os.listdir(file_dir):
-                                if title in f or f in title:
-                                    return os.path.join(file_dir, f), True
-        return None, False
-
-    # 图片消息 (type 3): msg/attach/<hash>/YYYY-MM/Img/*.dat
-    # 视频/语音消息: msg/video/YYYY-MM/ 或 msg/attach/
-    if base_type in (3, 34, 43):
-        # 搜索 attach 目录下对应月份的文件
-        attach_dir = os.path.join(msg_dir, "attach")
-        if not os.path.isdir(attach_dir):
-            return None, False
-
-        # 尝试用 chat_username 的 MD5 匹配 attach 子目录
-        target_hash = None
-        if chat_username:
-            h = hashlib.md5(chat_username.encode()).hexdigest()
-            candidate = os.path.join(attach_dir, h)
-            if os.path.isdir(candidate):
-                target_hash = h
-
-        # 限定搜索范围：目标目录或所有目录
-        search_dirs = [target_hash] if target_hash else [
-            d for d in os.listdir(attach_dir)
-            if os.path.isdir(os.path.join(attach_dir, d))
-        ]
-
-        sub_dir_name = "Img" if base_type == 3 else ("Video" if base_type == 43 else "Voice")
-
-        for d in search_dirs:
-            sub = os.path.join(attach_dir, d, date_prefix, sub_dir_name)
-            if os.path.isdir(sub):
-                files = [f for f in os.listdir(sub) if not f.endswith("_h.dat")]
-                if files:
-                    # 返回目录路径（具体是哪个文件无法从 XML 精确匹配）
-                    sample = files[0]
-                    return os.path.join(sub, sample), True
-
-        # 视频：也检查 msg/video/
-        if base_type == 43:
-            video_dir = os.path.join(msg_dir, "video", date_prefix)
-            if os.path.isdir(video_dir):
-                thumbs = [f for f in os.listdir(video_dir) if f.endswith("_thumb.jpg")]
-                if thumbs:
-                    return os.path.join(video_dir, thumbs[0]), True
-
-    return None, False
-
-
 def _format_message_text(local_id, local_type, content, is_group, chat_username, chat_display_name, names, display_name_fn, db_dir=None, create_time_ts=0, resolve_media=False):
     sender, text = _parse_message_content(content, local_type, is_group)
     base_type, _ = _split_msg_type(local_type)
 
-    media_path = None
-    media_exists = False
-    if resolve_media and db_dir and content:
+    media_reference = None
+    if resolve_media and db_dir and base_type in (3, 34, 43, 49):
         try:
-            media_path, media_exists = _resolve_media_path(
+            media_reference = _resolve_media_reference(
                 db_dir, content, local_type, create_time_ts, chat_username
             )
         except Exception:
-            pass
+            media_reference = _media_resolution()
 
     if base_type == 3:
-        if media_path:
-            tag = f"[图片] {media_path}"
-            if not media_exists:
-                tag += " (文件不存在)"
+        if resolve_media:
+            text = _format_media_message_text("图片", media_reference, local_id=local_id)
         else:
-            tag = f"[图片] (local_id={local_id})"
-        text = tag
+            text = f"[图片] (local_id={local_id})"
+    elif base_type == 34 and resolve_media:
+        text = _format_media_message_text("语音", media_reference, local_id=local_id)
+    elif base_type == 43 and resolve_media:
+        text = _format_media_message_text("视频", media_reference, local_id=local_id)
     elif base_type == 47:
         text = "[表情]"
     elif base_type == 50:
@@ -466,7 +659,8 @@ def _format_message_text(local_id, local_type, content, is_group, chat_username,
     elif base_type == 49:
         text = _format_app_message_text(
             text, local_type, is_group, chat_username, chat_display_name, names, display_name_fn,
-            resolve_media=resolve_media, db_dir=db_dir, create_time_ts=create_time_ts
+            resolve_media=resolve_media, db_dir=db_dir, create_time_ts=create_time_ts,
+            media_reference=media_reference,
         ) or "[链接/文件]"
     elif base_type != 1:
         type_label = format_msg_type(local_type)
