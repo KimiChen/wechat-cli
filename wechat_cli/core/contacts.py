@@ -1,13 +1,31 @@
-"""联系人管理 — 加载、缓存、模糊匹配"""
+"""Contact lookup helpers."""
 
 import os
 import re
 import sqlite3
 
 
-_contact_names = None  # {username: display_name}
-_contact_full = None   # [{username, nick_name, remark}]
-_self_username = None
+def _get_state(cache):
+    state = getattr(cache, "_contacts_state", None)
+    if state is None:
+        state = {
+            "datasets": {},
+            "self_usernames": {},
+        }
+        setattr(cache, "_contacts_state", state)
+    return state
+
+
+def _get_dataset_state(cache, decrypted_dir):
+    state = _get_state(cache)
+    key = os.path.abspath(decrypted_dir or "")
+    return state["datasets"].setdefault(
+        key,
+        {
+            "names": None,
+            "full": None,
+        },
+    )
 
 
 def _load_contacts_from(db_path):
@@ -15,154 +33,165 @@ def _load_contacts_from(db_path):
     full = []
     conn = sqlite3.connect(db_path)
     try:
-        for r in conn.execute("SELECT username, nick_name, remark FROM contact").fetchall():
-            uname, nick, remark = r
-            display = remark if remark else nick if nick else uname
-            names[uname] = display
-            full.append({'username': uname, 'nick_name': nick or '', 'remark': remark or ''})
+        for username, nick_name, remark in conn.execute(
+            "SELECT username, nick_name, remark FROM contact"
+        ).fetchall():
+            display = remark if remark else nick_name if nick_name else username
+            names[username] = display
+            full.append(
+                {
+                    "username": username,
+                    "nick_name": nick_name or "",
+                    "remark": remark or "",
+                }
+            )
     finally:
         conn.close()
     return names, full
 
 
-def get_contact_names(cache, decrypted_dir):
-    global _contact_names, _contact_full
-    if _contact_names is not None:
-        return _contact_names
-
+def _resolve_contact_db_path(cache, decrypted_dir):
     pre_decrypted = os.path.join(decrypted_dir, "contact", "contact.db")
     if os.path.exists(pre_decrypted):
-        try:
-            _contact_names, _contact_full = _load_contacts_from(pre_decrypted)
-            return _contact_names
-        except Exception:
-            pass
+        return pre_decrypted
+    return cache.get(os.path.join("contact", "contact.db"))
 
-    path = cache.get(os.path.join("contact", "contact.db"))
-    if path:
-        try:
-            _contact_names, _contact_full = _load_contacts_from(path)
-            return _contact_names
-        except Exception:
-            pass
 
-    return {}
+def _load_contact_dataset(cache, decrypted_dir):
+    dataset = _get_dataset_state(cache, decrypted_dir)
+    if dataset["names"] is not None:
+        return dataset["names"], dataset["full"]
+
+    db_path = _resolve_contact_db_path(cache, decrypted_dir)
+    if not db_path:
+        dataset["names"] = {}
+        dataset["full"] = []
+        return dataset["names"], dataset["full"]
+
+    try:
+        dataset["names"], dataset["full"] = _load_contacts_from(db_path)
+    except Exception:
+        dataset["names"] = {}
+        dataset["full"] = []
+    return dataset["names"], dataset["full"]
+
+
+def get_contact_names(cache, decrypted_dir):
+    names, _ = _load_contact_dataset(cache, decrypted_dir)
+    return names
 
 
 def get_contact_full(cache, decrypted_dir):
-    global _contact_full
-    if _contact_full is None:
-        get_contact_names(cache, decrypted_dir)
-    return _contact_full or []
+    _, full = _load_contact_dataset(cache, decrypted_dir)
+    return full
 
 
 def resolve_username(chat_name, cache, decrypted_dir):
     names = get_contact_names(cache, decrypted_dir)
-    if chat_name in names or chat_name.startswith('wxid_') or '@chatroom' in chat_name:
+    if chat_name in names or chat_name.startswith("wxid_") or "@chatroom" in chat_name:
         return chat_name
+
     chat_lower = chat_name.lower()
-    for uname, display in names.items():
+    for username, display in names.items():
         if chat_lower == display.lower():
-            return uname
-    for uname, display in names.items():
+            return username
+    for username, display in names.items():
         if chat_lower in display.lower():
-            return uname
+            return username
     return None
 
 
 def get_self_username(db_dir, cache, decrypted_dir):
-    global _self_username
-    if _self_username:
-        return _self_username
     if not db_dir:
-        return ''
+        return ""
+
+    state = _get_state(cache)
+    key = os.path.abspath(db_dir)
+    if key in state["self_usernames"]:
+        return state["self_usernames"][key]
+
     names = get_contact_names(cache, decrypted_dir)
     account_dir = os.path.basename(os.path.dirname(db_dir))
     candidates = [account_dir]
-    m = re.fullmatch(r'(.+)_([0-9a-fA-F]{4,})', account_dir)
-    if m:
-        candidates.insert(0, m.group(1))
+    match = re.fullmatch(r"(.+)_([0-9a-fA-F]{4,})", account_dir)
+    if match:
+        candidates.insert(0, match.group(1))
+
+    resolved = ""
     for candidate in candidates:
         if candidate and candidate in names:
-            _self_username = candidate
-            return _self_username
-    return ''
+            resolved = candidate
+            break
+
+    state["self_usernames"][key] = resolved
+    return resolved
 
 
 def get_group_members(chatroom_username, cache, decrypted_dir):
-    """获取群聊成员列表。
-
-    通过 contact.db 的 chatroom_member 关联表查询。
-
-    Returns:
-        dict: {'members': [...], 'owner': str}
-        每个 member: {'username': ..., 'nick_name': ..., 'remark': ..., 'display_name': ...}
-    """
-    pre_decrypted = os.path.join(decrypted_dir, "contact", "contact.db")
-    if os.path.exists(pre_decrypted):
-        db_path = pre_decrypted
-    else:
-        db_path = cache.get(os.path.join("contact", "contact.db"))
-
+    """Return group members and owner info."""
+    db_path = _resolve_contact_db_path(cache, decrypted_dir)
     if not db_path:
-        return {'members': [], 'owner': ''}
+        return {"members": [], "owner": ""}
 
     names = get_contact_names(cache, decrypted_dir)
     conn = sqlite3.connect(db_path)
     try:
-        # 1. 找到 chatroom 的 contact.id
-        row = conn.execute("SELECT id FROM contact WHERE username = ?", (chatroom_username,)).fetchone()
+        row = conn.execute(
+            "SELECT id FROM contact WHERE username = ?",
+            (chatroom_username,),
+        ).fetchone()
         if not row:
-            return {'members': [], 'owner': ''}
+            return {"members": [], "owner": ""}
         room_id = row[0]
 
-        # 2. 获取群主
-        owner = ''
-        owner_row = conn.execute("SELECT owner FROM chat_room WHERE id = ?", (room_id,)).fetchone()
+        owner = ""
+        owner_row = conn.execute(
+            "SELECT owner FROM chat_room WHERE id = ?",
+            (room_id,),
+        ).fetchone()
         if owner_row and owner_row[0]:
             owner = names.get(owner_row[0], owner_row[0])
 
-        # 3. 获取成员 ID 列表
-        member_ids = [r[0] for r in conn.execute(
-            "SELECT member_id FROM chatroom_member WHERE room_id = ?", (room_id,)
-        ).fetchall()]
+        member_ids = [
+            item[0]
+            for item in conn.execute(
+                "SELECT member_id FROM chatroom_member WHERE room_id = ?",
+                (room_id,),
+            ).fetchall()
+        ]
         if not member_ids:
-            return {'members': [], 'owner': owner}
+            return {"members": [], "owner": owner}
 
-        # 4. 批量查询成员信息
-        placeholders = ','.join('?' * len(member_ids))
+        placeholders = ",".join("?" * len(member_ids))
         members = []
-        for uid, username, nick, remark in conn.execute(
+        for _, username, nick_name, remark in conn.execute(
             f"SELECT id, username, nick_name, remark FROM contact WHERE id IN ({placeholders})",
-            member_ids
+            member_ids,
         ):
-            display = remark if remark else nick if nick else username
-            members.append({
-                'username': username,
-                'nick_name': nick or '',
-                'remark': remark or '',
-                'display_name': display,
-            })
+            display = remark if remark else nick_name if nick_name else username
+            members.append(
+                {
+                    "username": username,
+                    "nick_name": nick_name or "",
+                    "remark": remark or "",
+                    "display_name": display,
+                }
+            )
 
-        # 按 display_name 排序，群主排最前
-        members.sort(key=lambda m: (0 if m['username'] == (owner_row[0] if owner_row else '') else 1, m['display_name']))
-
-        return {'members': members, 'owner': owner}
+        owner_username = owner_row[0] if owner_row else ""
+        members.sort(
+            key=lambda item: (
+                0 if item["username"] == owner_username else 1,
+                item["display_name"],
+            )
+        )
+        return {"members": members, "owner": owner}
     finally:
         conn.close()
 
 
 def get_contact_detail(username, cache, decrypted_dir):
-    """获取联系人详情。
-
-    Returns:
-        dict or None: 联系人详细信息
-    """
-    pre_decrypted = os.path.join(decrypted_dir, "contact", "contact.db")
-    if os.path.exists(pre_decrypted):
-        db_path = pre_decrypted
-    else:
-        db_path = cache.get(os.path.join("contact", "contact.db"))
+    db_path = _resolve_contact_db_path(cache, decrypted_dir)
     if not db_path:
         return None
 
@@ -172,22 +201,32 @@ def get_contact_detail(username, cache, decrypted_dir):
             "SELECT username, nick_name, remark, alias, description, "
             "small_head_url, big_head_url, verify_flag, local_type "
             "FROM contact WHERE username = ?",
-            (username,)
+            (username,),
         ).fetchone()
         if not row:
             return None
-        uname, nick, remark, alias, desc, small_url, big_url, verify, ltype = row
+        (
+            resolved_username,
+            nick_name,
+            remark,
+            alias,
+            description,
+            small_head_url,
+            big_head_url,
+            verify_flag,
+            local_type,
+        ) = row
         return {
-            'username': uname,
-            'nick_name': nick or '',
-            'remark': remark or '',
-            'alias': alias or '',
-            'description': desc or '',
-            'avatar': small_url or big_url or '',
-            'verify_flag': verify or 0,
-            'local_type': ltype,
-            'is_group': '@chatroom' in uname,
-            'is_subscription': uname.startswith('gh_'),
+            "username": resolved_username,
+            "nick_name": nick_name or "",
+            "remark": remark or "",
+            "alias": alias or "",
+            "description": description or "",
+            "avatar": small_head_url or big_head_url or "",
+            "verify_flag": verify_flag or 0,
+            "local_type": local_type,
+            "is_group": "@chatroom" in resolved_username,
+            "is_subscription": resolved_username.startswith("gh_"),
         }
     finally:
         conn.close()
@@ -195,7 +234,7 @@ def get_contact_detail(username, cache, decrypted_dir):
 
 def display_name_for_username(username, names, db_dir, cache, decrypted_dir):
     if not username:
-        return ''
+        return ""
     if username == get_self_username(db_dir, cache, decrypted_dir):
-        return 'me'
+        return "me"
     return names.get(username, username)
