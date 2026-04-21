@@ -43,6 +43,8 @@ pip install -e .
 安装完成后，PowerShell 里常见有 3 种运行方式：
 
 ```powershell
+#运行 Get-Command wechat-cli，查看PATH中是否有wechat-cli
+
 # 方式 1：如果 wechat-cli 已经在 PATH 中
 wechat-cli init
 wechat-cli sessions --limit 10
@@ -56,9 +58,9 @@ py -3.14 -m wechat_cli.main sessions --limit 10
 .\.venv\Scripts\wechat-cli.exe sessions --limit 10
 ```
 
-如果你已经执行了 `pip install -e .`，但 PowerShell 里提示找不到 `wechat-cli`，最稳妥的做法就是直接使用 `py -3.14 -m wechat_cli.main ...`。
+如果你已经执行了 `pip install -e .`，但 PowerShell 里提示找不到 `wechat-cli`，最稳妥的做法就是直接使用 `py -3.14 -m wechat_cli.main init`。
 
-下面 README 里所有 `wechat-cli ...` 示例，在 PowerShell 中都可以按同样规则替换成 `py -3.14 -m wechat_cli.main ...` 或 `.\.venv\Scripts\wechat-cli.exe ...`。
+下面 README 里所有 `wechat-cli init` 示例，在 PowerShell 中都可以按同样规则替换成 `py -3.14 -m wechat_cli.main init` 或 `.\.venv\Scripts\wechat-cli.exe init`。
 
 ---
 
