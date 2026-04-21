@@ -10,6 +10,13 @@ import tempfile
 from .common import collect_db_files, cross_verify_keys, save_results, scan_memory_for_keys
 
 
+_ENTITLEMENT_LOAD_ERRORS = (
+    OSError,
+    plistlib.InvalidFileException,
+    subprocess.SubprocessError,
+)
+
+
 def _find_binary():
     """查找对应架构的 C 二进制。"""
     machine = platform.machine()
@@ -51,7 +58,7 @@ def _get_original_entitlements(app_path):
         )
         if result.returncode == 0 and result.stdout:
             return plistlib.loads(result.stdout)
-    except Exception:
+    except _ENTITLEMENT_LOAD_ERRORS:
         pass
     return None
 
@@ -88,7 +95,7 @@ def _resign_wechat():
     # 提取并合并 entitlements
     try:
         ent_data = _build_entitlements_xml(wechat_app)
-    except Exception as e:
+    except _ENTITLEMENT_LOAD_ERRORS as e:
         return False, f"提取微信原始权限失败: {e}"
 
     ent_fd, ent_path = tempfile.mkstemp(suffix=".plist")

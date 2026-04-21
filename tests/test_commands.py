@@ -81,6 +81,18 @@ class CommandRegressionTests(unittest.TestCase):
         self.assertIn("--end-time TEXT", result.output)
         self.assertIn("--limit INTEGER", result.output)
 
+    def test_cli_reports_expected_app_context_errors(self):
+        with mock.patch("wechat_cli.main.AppContext", side_effect=OSError("keys file unreadable")):
+            result = self.runner.invoke(cli, ["sessions"])
+
+        self.assertEqual(result.exit_code, 1, result.output)
+        self.assertIn("初始化失败: keys file unreadable", result.output)
+
+    def test_cli_propagates_unexpected_app_context_errors(self):
+        with mock.patch("wechat_cli.main.AppContext", side_effect=RuntimeError("unexpected app bug")):
+            with self.assertRaisesRegex(RuntimeError, "unexpected app bug"):
+                self.runner.invoke(cli, ["sessions"], catch_exceptions=False)
+
     def test_search_reports_missing_message_tables(self):
         resolved = [
             {
@@ -581,6 +593,66 @@ class CommandRegressionTests(unittest.TestCase):
 
         self.assertEqual(result.exit_code, 0, result.output)
         self.assertIn("--force", result.output)
+
+    def test_init_reports_runtime_key_extraction_failure(self):
+        with self.runner.isolated_filesystem():
+            state_dir = Path("state")
+            db_dir = Path("db_storage")
+            db_dir.mkdir()
+            config_file = state_dir / "config.json"
+            keys_file = state_dir / "all_keys.json"
+
+            with mock.patch.object(init_cmd, "STATE_DIR", str(state_dir)):
+                with mock.patch.object(init_cmd, "CONFIG_FILE", str(config_file)):
+                    with mock.patch.object(init_cmd, "KEYS_FILE", str(keys_file)):
+                        with mock.patch("wechat_cli.keys.extract_keys", side_effect=RuntimeError("permission denied")):
+                            result = self.runner.invoke(
+                                init_cmd.init,
+                                ["--db-dir", str(db_dir)],
+                            )
+
+        self.assertEqual(result.exit_code, 1, result.output)
+        self.assertIn("密钥提取失败: permission denied", result.output)
+        self.assertIn("sudo 权限", result.output)
+
+    def test_init_reports_expected_external_key_extraction_errors(self):
+        with self.runner.isolated_filesystem():
+            state_dir = Path("state")
+            db_dir = Path("db_storage")
+            db_dir.mkdir()
+            config_file = state_dir / "config.json"
+            keys_file = state_dir / "all_keys.json"
+
+            with mock.patch.object(init_cmd, "STATE_DIR", str(state_dir)):
+                with mock.patch.object(init_cmd, "CONFIG_FILE", str(config_file)):
+                    with mock.patch.object(init_cmd, "KEYS_FILE", str(keys_file)):
+                        with mock.patch("wechat_cli.keys.extract_keys", side_effect=OSError("disk is read-only")):
+                            result = self.runner.invoke(
+                                init_cmd.init,
+                                ["--db-dir", str(db_dir)],
+                            )
+
+        self.assertEqual(result.exit_code, 1, result.output)
+        self.assertIn("密钥提取出错: disk is read-only", result.output)
+
+    def test_init_propagates_unexpected_key_extraction_errors(self):
+        with self.runner.isolated_filesystem():
+            state_dir = Path("state")
+            db_dir = Path("db_storage")
+            db_dir.mkdir()
+            config_file = state_dir / "config.json"
+            keys_file = state_dir / "all_keys.json"
+
+            with mock.patch.object(init_cmd, "STATE_DIR", str(state_dir)):
+                with mock.patch.object(init_cmd, "CONFIG_FILE", str(config_file)):
+                    with mock.patch.object(init_cmd, "KEYS_FILE", str(keys_file)):
+                        with mock.patch("wechat_cli.keys.extract_keys", side_effect=ValueError("unexpected key bug")):
+                            with self.assertRaisesRegex(ValueError, "unexpected key bug"):
+                                self.runner.invoke(
+                                    init_cmd.init,
+                                    ["--db-dir", str(db_dir)],
+                                    catch_exceptions=False,
+                                )
 
 
 if __name__ == "__main__":

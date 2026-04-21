@@ -1,11 +1,15 @@
 """wechat-cli 入口"""
 
+import json
 import sys
 
 import click
 
 from . import __version__
 from .core.context import AppContext
+
+
+_APP_CONTEXT_INIT_ERRORS = (OSError, json.JSONDecodeError)
 
 
 @click.group()
@@ -37,7 +41,7 @@ def cli(ctx, config_path):
     except FileNotFoundError as e:
         click.echo(str(e), err=True)
         sys.exit(1)
-    except Exception as e:
+    except _APP_CONTEXT_INIT_ERRORS as e:
         click.echo(f"初始化失败: {e}", err=True)
         sys.exit(1)
 

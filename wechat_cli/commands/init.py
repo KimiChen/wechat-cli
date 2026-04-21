@@ -9,6 +9,9 @@ import click
 from ..core.config import STATE_DIR, CONFIG_FILE, KEYS_FILE, auto_detect_db_dir
 
 
+_KEY_EXTRACTION_EXTERNAL_ERRORS = (OSError, json.JSONDecodeError)
+
+
 @click.command()
 @click.option("--db-dir", default=None, help="微信数据目录路径（默认自动检测）")
 @click.option("--force", is_flag=True, help="强制重新提取密钥")
@@ -52,7 +55,7 @@ def init(db_dir, force):
         if "sudo" not in str(e).lower():
             click.echo("提示: macOS/Linux 可能需要 sudo 权限", err=True)
         sys.exit(1)
-    except Exception as e:
+    except _KEY_EXTRACTION_EXTERNAL_ERRORS as e:
         click.echo(f"\n[!] 密钥提取出错: {e}", err=True)
         sys.exit(1)
 
