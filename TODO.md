@@ -59,9 +59,11 @@
   当前 GitHub Actions 的 package smoke 固定在 Python `3.14` 上执行，覆盖仓库唯一支持版本的打包与安装链路。
 - [x] 补发布产物内容与哈希校验。
   当前 `scripts/package_smoke.py` 会校验 wheel / sdist 文件名与关键归档成员，并打印每个产物的 SHA256，帮助提前发现发布产物布局漂移。
+- [x] 补 GitHub Release 自动化。
+  当前已新增 `scripts/check_release_tag.py`、`scripts/build_release_artifacts.py` 与 `.github/workflows/release.yml`，会在 `v*` tag 上校验 tag/version 一致性、生成 `dist/` 与 `SHA256SUMS`，并创建或更新同名 GitHub Release。
 
 ## 建议执行顺序
 
-1. 先考虑更细的发布产物校验，例如 GitHub Release 资产。
-2. 然后再考虑更完整的 Python 发布编排，例如 changelog、tag 和 release 说明的自动化串联。
+1. 先考虑 changelog 与 release 说明的自动化串联，继续减少手工发布步骤。
+2. 然后再考虑更强的发布资产保障，例如签名、下载回读校验或更细的 post-publish smoke。
 3. 最后再视实际维护成本决定是否把本地发布辅助脚本和 CI 做更紧密的统一编排。

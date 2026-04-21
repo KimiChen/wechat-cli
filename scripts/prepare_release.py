@@ -30,6 +30,10 @@ def _parse_args():
         help="Skip scripts/package_smoke.py.",
     )
     parser.add_argument(
+        "--tag",
+        help="Optional release tag to validate before running checks, for example v0.2.5.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Print the planned commands without executing them.",
@@ -43,6 +47,8 @@ def _format_cmd(cmd):
 
 def _build_command_plan(args):
     commands = []
+    if args.tag:
+        commands.append([sys.executable, "scripts/check_release_tag.py", args.tag])
     if not args.skip_tests:
         commands.append([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"])
     if not args.skip_compileall:

@@ -27,6 +27,12 @@ class PrepareReleaseScriptTests(unittest.TestCase):
         self.assertIn("-m compileall wechat_cli tests scripts", output)
         self.assertIn("scripts/package_smoke.py", output)
 
+    def test_dry_run_includes_release_tag_validation_when_requested(self):
+        result = self._run("--dry-run", "--tag", "v0.2.4")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("scripts/check_release_tag.py v0.2.4", result.stdout)
+
     def test_dry_run_respects_skip_flags(self):
         result = self._run("--dry-run", "--skip-tests", "--skip-package-smoke")
 

@@ -205,8 +205,10 @@
 python -m unittest discover -s tests -v
 python -m compileall wechat_cli tests scripts
 python scripts/check_release_metadata.py
+python scripts/check_release_tag.py v0.2.4
 python scripts/package_smoke.py
 python scripts/prepare_release.py --dry-run
+python scripts/build_release_artifacts.py --outdir dist
 ```
 
 说明:
@@ -217,12 +219,16 @@ python scripts/prepare_release.py --dry-run
   主要用于快速发现语法错误和导入级问题。
 - `check_release_metadata.py`
   校验 `pyproject.toml` 与 `wechat_cli.__version__` 是否一致。
+- `check_release_tag.py`
+  校验 Git tag 是否满足 `v<version>` 格式，并且与 `pyproject.toml` / `wechat_cli.__version__` 完全一致。
 - `bump_version.py`
   同步更新 `pyproject.toml` 与 `wechat_cli.__version__`，支持 `--dry-run`、`--print-current` 和在必要时用 `--allow-misaligned` 修复漂移。
 - `package_smoke.py`
   先跑 release metadata 校验，再执行 `python -m build`，校验 wheel / sdist 文件名与关键归档内容，打印 SHA256，随后在临时虚拟环境里分别安装 wheel / sdist，并确认 `wechat-cli` 入口与模块导入都可用。
 - `prepare_release.py`
-  把 `unittest`、`compileall` 和 `package_smoke` 串成单入口；支持 `--skip-tests`、`--skip-compileall`、`--skip-package-smoke` 与 `--dry-run`。
+  把 `check_release_tag.py`、`unittest`、`compileall` 和 `package_smoke` 串成单入口；支持 `--tag`、`--skip-tests`、`--skip-compileall`、`--skip-package-smoke` 与 `--dry-run`。
+- `build_release_artifacts.py`
+  在 `dist/` 下正式构建 wheel / sdist，并额外写出 `SHA256SUMS`，用于 GitHub Release 资产上传。
 
 ## 发布流程
 
@@ -271,10 +277,12 @@ python scripts/package_smoke.py
 
 ```bash
 python scripts/prepare_release.py
+python scripts/prepare_release.py --tag v0.2.5
 ```
 
 这条命令会依次执行:
 
+- `python scripts/check_release_tag.py v0.2.5`（仅当传入 `--tag` 时）
 - `python -m unittest discover -s tests -v`
 - `python -m compileall wechat_cli tests scripts`
 - `python scripts/package_smoke.py`
@@ -300,7 +308,15 @@ python scripts/prepare_release.py --skip-package-smoke
 - 当前 `package_smoke.py` 已包含发布产物内容校验：它会检查 wheel / sdist 文件名、关键归档成员，并打印每个产物的 SHA256。
 - 当前 `package_smoke.py` 也包含目标环境安装 smoke：它会在临时虚拟环境中安装 wheel / sdist，并校验 `wechat-cli --version`、`wechat-cli --help` 与模块导入。
 - GitHub Actions 当前会在 Python `3.14` 上执行 package smoke，确保唯一受支持版本的打包与安装链路可用。
-- 如果你还想进一步提高发布把关强度，可以再加一层更贴近真实用户环境的 smoke，例如 GitHub Release 资产校验或更多 Python 版本矩阵。
+
+### 5. GitHub Release
+
+当前仓库已经补上了基于 tag 的 GitHub Release 自动化:
+
+1. 先同步版本号，例如 `python scripts/bump_version.py 0.2.5`
+2. 本地预检可直接跑 `python scripts/prepare_release.py --tag v0.2.5`
+3. 如需提前产出将要上传的 Release 资产，可执行 `python scripts/build_release_artifacts.py --outdir dist`
+4. 推送 tag 后，`.github/workflows/release.yml` 会在 Python `3.14` 上再次执行 `prepare_release.py --tag "$GITHUB_REF_NAME"`，构建 `dist/*.whl`、`dist/*.tar.gz` 和 `dist/SHA256SUMS`，然后创建或更新同名 GitHub Release
 
 ## 已知兼容性边界
 
@@ -315,6 +331,6 @@ python scripts/prepare_release.py --skip-package-smoke
 
 如果继续沿 TODO 往下做，比较自然的顺序是:
 
-1. 版本同步脚本现在已经补齐；如果后续还要继续减少手工步骤，可以再考虑把 changelog / Git tag / GitHub Release 资产检查串进同一条发布辅助链路。
-2. 如果未来还想继续收紧发布校验，可以补更细的发布产物检查，例如 GitHub Release 资产或更多 Python 版本矩阵。
+1. 现在 tag 校验、GitHub Release 资产构建和自动发布都已经补齐；如果后续还要继续减少手工步骤，可以再考虑把 changelog 和 release 说明生成串进同一条发布辅助链路。
+2. 如果未来还想继续收紧发布校验，可以补更细的发布产物检查，例如签名、post-publish 下载校验或更多 Python 版本矩阵。
 3. 后续只要继续拆边界，优先沿用“命令层 -> 服务层 -> repo 层”的结构，不要把 SQL 和 Click 再重新耦合回去。

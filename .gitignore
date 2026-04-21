@@ -10,9 +10,6 @@ build/
 # PyInstaller
 *.spec
 
-# npm platform binaries (published to npm, not git)
-npm/platforms/*/bin/
-
 # Virtual environments
 .venv/
 venv/
@@ -37,8 +34,6 @@ Thumbs.db
 # Sensitive data — NEVER commit
 *.json
 !pyproject.toml
-!npm/**/package.json
-!npm/wechat-cli/package-metadata.json
 
 # Temp files
 *.tmp
