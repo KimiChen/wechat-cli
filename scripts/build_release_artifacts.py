@@ -2,8 +2,10 @@
 """Build GitHub Release artifacts and write SHA256SUMS."""
 
 import argparse
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from check_release_tag import read_versions
@@ -56,23 +58,41 @@ def _assert_release_metadata(root):
     return project_version
 
 
+def _remove_previous_release_artifacts(output_dir):
+    for path in Path(output_dir).iterdir():
+        if not path.is_file():
+            continue
+        if path.name.endswith(".whl") or path.name.endswith(".tar.gz"):
+            path.unlink()
+
+
 def build_release_artifacts(root, output_dir):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "build",
-            "--sdist",
-            "--wheel",
-            "--outdir",
-            str(output_dir),
-        ],
-        cwd=Path(root),
-        check=True,
-    )
-    return collect_python_artifacts(output_dir)
+    with tempfile.TemporaryDirectory(prefix="wechat-cli-release-build-", dir=output_dir.parent) as tmpdir:
+        staging_dir = Path(tmpdir)
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "build",
+                "--sdist",
+                "--wheel",
+                "--outdir",
+                str(staging_dir),
+            ],
+            cwd=Path(root),
+            check=True,
+        )
+        staged_artifacts = collect_python_artifacts(staging_dir)
+        _remove_previous_release_artifacts(output_dir)
+
+        artifacts = {}
+        for artifact_label, artifact_path in staged_artifacts.items():
+            destination = output_dir / artifact_path.name
+            shutil.copy2(artifact_path, destination)
+            artifacts[artifact_label] = destination
+        return artifacts
 
 
 def write_sha256sums(paths, output_path):
