@@ -51,11 +51,11 @@
   当前已新增 `scripts/prepare_release.py`，可把 `unittest`、`compileall` 与最终 `package_smoke` 串成单入口，并支持 `--skip-*` 与 `--dry-run`。
 - [x] 清理历史发布残留。
   旧的多平台 wrapper、平台包 manifest 与校验脚本已经从仓库中移除，避免文档、测试、CI 和源码包再次误接回旧发布链路。
-- [ ] 评估版本更新辅助脚本。
-  当前版本仍需手动改 `pyproject.toml` 和 `wechat_cli.__version__`；虽然已有对齐校验，但还没有统一的 bump/同步入口。
+- [x] 补版本更新辅助脚本。
+  当前已新增 `scripts/bump_version.py`，可同步更新 `pyproject.toml` 与 `wechat_cli.__version__`，并支持 `--dry-run`、`--print-current` 与 `--allow-misaligned`。
 
 ## 建议执行顺序
 
-1. 先评估版本更新辅助脚本，减少手工改版本号的发布摩擦。
-2. 然后视需要补充目标环境安装 smoke，进一步收紧发布前校验。
-3. 最后再考虑更完整的 Python 发布编排，例如 GitHub Release 资产校验。
+1. 先补目标环境安装 smoke，进一步收紧发布前校验。
+2. 然后再考虑更完整的 Python 发布编排，例如 GitHub Release 资产校验。
+3. 最后视实际维护成本决定是否补 changelog / tag / release 说明的自动化串联。

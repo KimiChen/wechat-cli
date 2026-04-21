@@ -217,6 +217,8 @@ python scripts/prepare_release.py --dry-run
   主要用于快速发现语法错误和导入级问题。
 - `check_release_metadata.py`
   校验 `pyproject.toml` 与 `wechat_cli.__version__` 是否一致。
+- `bump_version.py`
+  同步更新 `pyproject.toml` 与 `wechat_cli.__version__`，支持 `--dry-run`、`--print-current` 和在必要时用 `--allow-misaligned` 修复漂移。
 - `package_smoke.py`
   先跑 release metadata 校验，再执行 `python -m build`，确认 sdist / wheel 能正常构建。
 - `prepare_release.py`
@@ -224,14 +226,32 @@ python scripts/prepare_release.py --dry-run
 
 ## 发布流程
 
-当前发布流程已经收口为“人工改 Python 版本号 + 本地脚本校验”，低风险且便于在 fork 中持续维护。
+当前发布流程已经收口为“版本同步脚本 + 本地脚本校验”，低风险且便于在 fork 中持续维护。
 
 ### 1. 修改版本号
 
-至少需要同步检查以下文件:
+优先使用版本同步脚本:
+
+```bash
+python scripts/bump_version.py 0.2.5
+```
+
+这条命令会同步更新:
 
 - `pyproject.toml`
 - `wechat_cli/__init__.py`
+
+如果你只是想先看当前版本:
+
+```bash
+python scripts/bump_version.py --print-current
+```
+
+如果当前两个版本已经漂移，但你想强制收敛回来:
+
+```bash
+python scripts/bump_version.py 0.2.5 --allow-misaligned
+```
 
 ### 2. 运行校验
 
@@ -292,6 +312,6 @@ python scripts/prepare_release.py --skip-package-smoke
 
 如果继续沿 TODO 往下做，比较自然的顺序是:
 
-1. 如果未来版本修改仍频繁出错，可以考虑再补版本更新辅助脚本，而不仅是校验脚本。
-2. 如果未来平台包数量继续增加，可以补 tarball 内容清单或二进制元数据校验。
+1. 版本同步脚本现在已经补齐；如果后续还要继续减少手工步骤，可以再考虑把 changelog / Git tag / GitHub Release 资产检查串进同一条发布辅助链路。
+2. 如果未来还想继续收紧发布校验，可以补目标环境安装 smoke 或更细的发布产物检查。
 3. 后续只要继续拆边界，优先沿用“命令层 -> 服务层 -> repo 层”的结构，不要把 SQL 和 Click 再重新耦合回去。
