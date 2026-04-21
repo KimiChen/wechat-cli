@@ -115,6 +115,7 @@ class GitHubReleaseTests(unittest.TestCase):
         for snippet in (
             'tags:\n      - "v*"',
             'python-version: "3.14"',
+            "python -m pip install -e .",
             'python scripts/prepare_release.py --tag "${GITHUB_REF_NAME}"',
             "python scripts/build_release_artifacts.py --outdir dist",
             "dist/SHA256SUMS",
