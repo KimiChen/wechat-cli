@@ -65,6 +65,7 @@ class ReleaseMetadataTests(unittest.TestCase):
         self.assertNotIn('python-version:\n          - "3.10"', workflow)
         self.assertNotIn('- "3.11"', workflow)
         self.assertNotIn('- "3.12"', workflow)
+        self.assertIn("python -m compileall wechat_cli tests scripts", workflow)
         self.assertIn("python scripts/package_smoke.py", workflow)
         self.assertIn("python -m pip install build", workflow)
 
