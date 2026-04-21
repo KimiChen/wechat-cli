@@ -38,6 +38,28 @@ cd wechat-cli
 pip install -e .
 ```
 
+### Windows PowerShell 中如何执行命令
+
+安装完成后，PowerShell 里常见有 3 种运行方式：
+
+```powershell
+# 方式 1：如果 wechat-cli 已经在 PATH 中
+wechat-cli init
+wechat-cli sessions --limit 10
+
+# 方式 2：如果当前 PowerShell 还找不到 wechat-cli
+py -3.14 -m wechat_cli.main init
+py -3.14 -m wechat_cli.main sessions --limit 10
+
+# 方式 3：如果你在项目目录里使用 .venv 虚拟环境
+.\.venv\Scripts\wechat-cli.exe init
+.\.venv\Scripts\wechat-cli.exe sessions --limit 10
+```
+
+如果你已经执行了 `pip install -e .`，但 PowerShell 里提示找不到 `wechat-cli`，最稳妥的做法就是直接使用 `py -3.14 -m wechat_cli.main ...`。
+
+下面 README 里所有 `wechat-cli ...` 示例，在 PowerShell 中都可以按同样规则替换成 `py -3.14 -m wechat_cli.main ...` 或 `.\.venv\Scripts\wechat-cli.exe ...`。
+
 ---
 
 ## 🚀 快速开始
@@ -49,9 +71,14 @@ pip install -e .
 ```bash
 # macOS/Linux: 可能需要 sudo 权限
 sudo wechat-cli init
+```
 
-# Windows: 在有足够权限的终端中运行
+```powershell
+# Windows PowerShell：在有足够权限的终端中运行
 wechat-cli init
+
+# 如果 wechat-cli 还不在 PATH 中
+py -3.14 -m wechat_cli.main init
 ```
 
 这一步会自动检测微信数据目录、提取加密密钥，并保存到 `~/.wechat-cli/`。
@@ -115,6 +142,14 @@ EOF
 wechat-cli sessions                        # 最近会话
 wechat-cli history "张三" --limit 20       # 聊天记录
 wechat-cli search "截止日期" --chat "项目组" # 搜索消息
+```
+
+在 Windows PowerShell 中，对应可以直接写成：
+
+```powershell
+py -3.14 -m wechat_cli.main sessions --limit 10
+py -3.14 -m wechat_cli.main history "张三" --limit 20
+py -3.14 -m wechat_cli.main search "截止日期" --chat "项目组"
 ```
 
 ---
