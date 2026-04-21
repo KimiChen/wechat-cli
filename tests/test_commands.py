@@ -17,6 +17,7 @@ from wechat_cli.commands import session_updates as session_updates_cmd
 from wechat_cli.commands import sessions as sessions_cmd
 from wechat_cli.commands import stats as stats_cmd
 from wechat_cli.commands import unread as unread_cmd
+from wechat_cli.main import cli
 
 
 class CommandRegressionTests(unittest.TestCase):
@@ -43,6 +44,42 @@ class CommandRegressionTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, result.output)
         self.assertIn("Alice  (alice)", result.output)
         self.assertIn("Bob  (bob)  备注: Teammate", result.output)
+
+    def test_cli_help_lists_supported_commands_and_hides_legacy_alias(self):
+        result = self.runner.invoke(cli, ["--help"])
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("--version", result.output)
+        self.assertIn("--config TEXT", result.output)
+        self.assertIn("--help", result.output)
+        self.assertIn("contacts", result.output)
+        self.assertIn("export", result.output)
+        self.assertIn("history", result.output)
+        self.assertIn("session-updates", result.output)
+        self.assertIn("unread", result.output)
+        self.assertNotIn("new-messages", result.output)
+
+    def test_history_help_lists_text_and_media_options(self):
+        result = self.runner.invoke(cli, ["history", "--help"])
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("--limit INTEGER", result.output)
+        self.assertIn("--offset INTEGER", result.output)
+        self.assertIn("--start-time TEXT", result.output)
+        self.assertIn("--end-time TEXT", result.output)
+        self.assertIn("--format [json|text]", result.output)
+        self.assertIn("--type [text|image|voice|video|sticker|location|link|file|call|system]", result.output)
+        self.assertIn("--media", result.output)
+
+    def test_export_help_lists_format_and_output_options(self):
+        result = self.runner.invoke(cli, ["export", "--help"])
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("--format [markdown|txt]", result.output)
+        self.assertIn("--output TEXT", result.output)
+        self.assertIn("--start-time TEXT", result.output)
+        self.assertIn("--end-time TEXT", result.output)
+        self.assertIn("--limit INTEGER", result.output)
 
     def test_search_reports_missing_message_tables(self):
         resolved = [
