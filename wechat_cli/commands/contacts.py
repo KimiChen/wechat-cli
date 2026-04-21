@@ -2,7 +2,7 @@
 
 import click
 
-from ..core.contacts import get_contact_full, get_contact_names, resolve_username, get_contact_detail
+from ..core.contacts import find_contact_detail, search_contacts
 from ..output.formatter import output
 
 
@@ -27,18 +27,12 @@ def contacts(ctx, query, detail, limit, fmt):
         _show_detail(app, detail, fmt)
         return
 
-    names = get_contact_names(app.cache, app.decrypted_dir)
-    full = get_contact_full(app.cache, app.decrypted_dir)
-
-    if query:
-        q_lower = query.lower()
-        matched = [c for c in full if q_lower in c.get('nick_name', '').lower()
-                   or q_lower in c.get('remark', '').lower()
-                   or q_lower in c.get('username', '').lower()]
-    else:
-        matched = full
-
-    matched = matched[:limit]
+    matched = search_contacts(
+        app.cache,
+        app.decrypted_dir,
+        query=query,
+        limit=limit,
+    )
 
     if fmt == 'json':
         output(matched, 'json')
@@ -56,15 +50,7 @@ def contacts(ctx, query, detail, limit, fmt):
 
 def _show_detail(app, name_or_id, fmt):
     """显示联系人详情。"""
-    names = get_contact_names(app.cache, app.decrypted_dir)
-
-    # 尝试解析为 username
-    username = resolve_username(name_or_id, app.cache, app.decrypted_dir)
-    if not username:
-        # 直接用原始输入试试
-        username = name_or_id
-
-    info = get_contact_detail(username, app.cache, app.decrypted_dir)
+    info = find_contact_detail(name_or_id, app.cache, app.decrypted_dir)
     if not info:
         click.echo(f"找不到联系人: {name_or_id}", err=True)
         return

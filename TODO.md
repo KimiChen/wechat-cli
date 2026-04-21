@@ -19,8 +19,8 @@
   联系人和自身账号缓存已经下沉到 `DBCache` 实例状态，避免多账号/多测试实例串数据。
 - [x] 抽取 `session.db` 共享访问层。
   `sessions`、`unread`、`new-messages` 的重复 `session.db` 查询与基础格式化逻辑已经集中到 `wechat_cli/core/session_data.py`。
-- [ ] 为 `contacts`、`messages`、`favorites` 建立更清晰的 repository/query 边界。
-  目标是让 `commands/` 主要负责参数编排和输出，SQL 查询与数据转换落到稳定的数据访问层。
+- [x] 为 `contacts`、`messages`、`favorites` 建立更清晰的 repository/query 边界。
+  目前 `contacts_repo`、`messages_repo`、`favorites_repo` 已承接 SQL 和 DB 路径解析，`commands/` 侧只保留参数、错误处理和输出编排。
 - [ ] 统一命令返回结构和失败模型。
   可以继续收敛 `failures`、`count`、`scope`、分页字段等约定，方便 CLI 和后续 Agent 调用。
 

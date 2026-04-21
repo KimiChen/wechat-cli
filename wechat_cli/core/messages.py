@@ -1,16 +1,13 @@
 """消息查询 — 分表查找、分页、格式化"""
 
-import hashlib
 import os
 import re
-import sqlite3
 import xml.etree.ElementTree as ET
-from contextlib import closing
 from datetime import datetime
 
 import zstandard as zstd
 
-from .key_utils import key_path_variants
+from . import messages_repo
 
 _zstd_dctx = zstd.ZstdDecompressor()
 _XML_UNSAFE_RE = re.compile(r'<!DOCTYPE|<!ENTITY', re.IGNORECASE)
@@ -37,43 +34,15 @@ MSG_TYPE_NAMES = list(MSG_TYPE_FILTERS.keys())
 # ---- 消息 DB 发现 ----
 
 def find_msg_db_keys(all_keys):
-    return sorted([
-        k for k in all_keys
-        if any(v.startswith("message/") for v in key_path_variants(k))
-        and any(re.search(r"message_\d+\.db$", v) for v in key_path_variants(k))
-    ])
+    return messages_repo.find_msg_db_keys(all_keys)
 
 
 def _is_safe_msg_table_name(table_name):
-    return bool(re.fullmatch(r'Msg_[0-9a-f]{32}', table_name))
+    return messages_repo.is_safe_msg_table_name(table_name)
 
 
 def _find_msg_tables_for_user(username, msg_db_keys, cache):
-    table_hash = hashlib.md5(username.encode()).hexdigest()
-    table_name = f"Msg_{table_hash}"
-    if not _is_safe_msg_table_name(table_name):
-        return []
-    matches = []
-    for rel_key in msg_db_keys:
-        path = cache.get(rel_key)
-        if not path:
-            continue
-        conn = sqlite3.connect(path)
-        try:
-            exists = conn.execute(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
-                (table_name,)
-            ).fetchone()
-            if not exists:
-                continue
-            max_ct = conn.execute(f"SELECT MAX(create_time) FROM [{table_name}]").fetchone()[0] or 0
-            matches.append({'db_path': path, 'table_name': table_name, 'max_create_time': max_ct})
-        except Exception:
-            pass
-        finally:
-            conn.close()
-    matches.sort(key=lambda x: x['max_create_time'], reverse=True)
-    return matches
+    return messages_repo.find_msg_tables_for_user(username, msg_db_keys, cache)
 
 
 # ---- 消息类型 ----
@@ -351,16 +320,7 @@ def _format_message_text(local_id, local_type, content, is_group, chat_username,
 # ---- Name2Id ----
 
 def _load_name2id_maps(conn):
-    id_to_username = {}
-    try:
-        rows = conn.execute("SELECT rowid, user_name FROM Name2Id").fetchall()
-    except sqlite3.Error:
-        return id_to_username
-    for rowid, user_name in rows:
-        if not user_name:
-            continue
-        id_to_username[rowid] = user_name
-    return id_to_username
+    return messages_repo.load_name2id_map(conn)
 
 
 # ---- 发送者解析 ----
@@ -383,43 +343,25 @@ def _resolve_sender_label(real_sender_id, sender_from_content, is_group, chat_us
 # ---- SQL 查询 ----
 
 def _build_message_filters(start_ts=None, end_ts=None, keyword='', msg_type_filter=None):
-    clauses = []
-    params = []
-    if start_ts is not None:
-        clauses.append('create_time >= ?')
-        params.append(start_ts)
-    if end_ts is not None:
-        clauses.append('create_time <= ?')
-        params.append(end_ts)
-    if keyword:
-        clauses.append('message_content LIKE ?')
-        params.append(f'%{keyword}%')
-    if msg_type_filter is not None:
-        base_type = msg_type_filter[0]
-        clauses.append('(local_type & 0xFFFFFFFF) = ?')
-        params.append(base_type)
-        if len(msg_type_filter) > 1:
-            clauses.append('((local_type >> 32) & 0xFFFFFFFF) = ?')
-            params.append(msg_type_filter[1])
-    return clauses, params
+    return messages_repo.build_message_filters(
+        start_ts=start_ts,
+        end_ts=end_ts,
+        keyword=keyword,
+        msg_type_filter=msg_type_filter,
+    )
 
 
 def _query_messages(conn, table_name, start_ts=None, end_ts=None, keyword='', limit=20, offset=0, msg_type_filter=None):
-    if not _is_safe_msg_table_name(table_name):
-        raise ValueError(f'非法消息表名: {table_name}')
-    clauses, params = _build_message_filters(start_ts, end_ts, keyword, msg_type_filter)
-    where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ''
-    sql = f"""
-        SELECT local_id, local_type, create_time, real_sender_id, message_content,
-               WCDB_CT_message_content
-        FROM [{table_name}]
-        {where_sql}
-        ORDER BY create_time DESC
-    """
-    if limit is None:
-        return conn.execute(sql, params).fetchall()
-    sql += "\n        LIMIT ? OFFSET ?"
-    return conn.execute(sql, (*params, limit, offset)).fetchall()
+    return messages_repo.query_messages(
+        conn,
+        table_name,
+        start_ts=start_ts,
+        end_ts=end_ts,
+        keyword=keyword,
+        limit=limit,
+        offset=offset,
+        msg_type_filter=msg_type_filter,
+    )
 
 
 # ---- 时间解析 ----
@@ -560,7 +502,7 @@ def collect_chat_history(ctx, names, display_name_fn, start_ts=None, end_ts=None
 
     for table_ctx in _iter_table_contexts(ctx):
         try:
-            with closing(sqlite3.connect(table_ctx['db_path'])) as conn:
+            with messages_repo.open_message_db(table_ctx['db_path']) as conn:
                 id_to_username = _load_name2id_maps(conn)
                 fetch_offset = 0
                 before = len(collected)
@@ -624,7 +566,7 @@ def collect_chat_search(ctx, names, keyword, display_name_fn, start_ts=None, end
 
     for db_path, db_contexts in contexts_by_db.items():
         try:
-            with closing(sqlite3.connect(db_path)) as conn:
+            with messages_repo.open_message_db(db_path) as conn:
                 db_entries, db_failures = _collect_search_entries(
                     conn, db_contexts, names, keyword, display_name_fn,
                     start_ts=start_ts, end_ts=end_ts, candidate_limit=candidate_limit,
@@ -645,7 +587,7 @@ def search_all_messages(msg_db_keys, cache, names, keyword, display_name_fn, sta
         if not path:
             continue
         try:
-            with closing(sqlite3.connect(path)) as conn:
+            with messages_repo.open_message_db(path) as conn:
                 contexts = _load_search_contexts_from_db(conn, path, names)
                 db_entries, db_failures = _collect_search_entries(
                     conn, contexts, names, keyword, display_name_fn,
@@ -660,27 +602,7 @@ def search_all_messages(msg_db_keys, cache, names, keyword, display_name_fn, sta
 
 
 def _load_search_contexts_from_db(conn, db_path, names):
-    tables = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'Msg_%'"
-    ).fetchall()
-    table_to_username = {}
-    try:
-        for (user_name,) in conn.execute("SELECT user_name FROM Name2Id").fetchall():
-            if not user_name:
-                continue
-            table_hash = hashlib.md5(user_name.encode()).hexdigest()
-            table_to_username[f"Msg_{table_hash}"] = user_name
-    except sqlite3.Error:
-        pass
-    contexts = []
-    for (table_name,) in tables:
-        username = table_to_username.get(table_name, '')
-        display_name = names.get(username, username) if username else table_name
-        contexts.append({
-            'query': display_name, 'username': username, 'display_name': display_name,
-            'db_path': db_path, 'table_name': table_name, 'is_group': '@chatroom' in username,
-        })
-    return contexts
+    return messages_repo.load_search_contexts_from_db(conn, db_path, names)
 
 
 # ---- 多聊天上下文解析 ----
@@ -734,45 +656,36 @@ def collect_chat_stats(ctx, names, display_name_fn, start_ts=None, end_ts=None):
 
     for table_ctx in _iter_table_contexts(ctx):
         try:
-            with closing(sqlite3.connect(table_ctx['db_path'])) as conn:
+            with messages_repo.open_message_db(table_ctx['db_path']) as conn:
                 id_to_username = _load_name2id_maps(conn)
                 tbl = table_ctx['table_name']
-                if not _is_safe_msg_table_name(tbl):
-                    continue
-
-                where_parts = []
-                params = []
-                if start_ts is not None:
-                    where_parts.append('create_time >= ?')
-                    params.append(start_ts)
-                if end_ts is not None:
-                    where_parts.append('create_time <= ?')
-                    params.append(end_ts)
-                where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ''
-
-                # 总数 + 类型分布
-                for bt, cnt in conn.execute(
-                    f"SELECT (local_type & 0xFFFFFFFF), COUNT(*) FROM [{tbl}] {where_sql} GROUP BY (local_type & 0xFFFFFFFF)",
-                    params
-                ).fetchall():
+                for bt, cnt in messages_repo.query_type_counts(
+                    conn,
+                    tbl,
+                    start_ts=start_ts,
+                    end_ts=end_ts,
+                ):
                     label = type_map.get(bt, f'type={bt}')
                     type_counts[label] = type_counts.get(label, 0) + cnt
                     total += cnt
 
-                # 发送者排名
-                for sid, cnt in conn.execute(
-                    f"SELECT real_sender_id, COUNT(*) FROM [{tbl}] {where_sql} GROUP BY real_sender_id ORDER BY COUNT(*) DESC LIMIT 20",
-                    params
-                ).fetchall():
+                for sid, cnt in messages_repo.query_sender_counts(
+                    conn,
+                    tbl,
+                    start_ts=start_ts,
+                    end_ts=end_ts,
+                    limit=20,
+                ):
                     uname = id_to_username.get(sid, str(sid))
                     if uname:
                         sender_counts[uname] = sender_counts.get(uname, 0) + cnt
 
-                # 24小时分布
-                for h, cnt in conn.execute(
-                    f"SELECT cast(strftime('%H', create_time, 'unixepoch', 'localtime') as integer), COUNT(*) FROM [{tbl}] {where_sql} GROUP BY cast(strftime('%H', create_time, 'unixepoch', 'localtime') as integer)",
-                    params
-                ).fetchall():
+                for h, cnt in messages_repo.query_hourly_counts(
+                    conn,
+                    tbl,
+                    start_ts=start_ts,
+                    end_ts=end_ts,
+                ):
                     if h is not None:
                         hourly_counts[h] = hourly_counts.get(h, 0) + cnt
         except Exception as e:

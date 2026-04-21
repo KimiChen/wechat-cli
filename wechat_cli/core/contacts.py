@@ -2,7 +2,8 @@
 
 import os
 import re
-import sqlite3
+
+from . import contacts_repo
 
 
 def _get_state(cache):
@@ -31,30 +32,21 @@ def _get_dataset_state(cache, decrypted_dir):
 def _load_contacts_from(db_path):
     names = {}
     full = []
-    conn = sqlite3.connect(db_path)
-    try:
-        for username, nick_name, remark in conn.execute(
-            "SELECT username, nick_name, remark FROM contact"
-        ).fetchall():
-            display = remark if remark else nick_name if nick_name else username
-            names[username] = display
-            full.append(
-                {
-                    "username": username,
-                    "nick_name": nick_name or "",
-                    "remark": remark or "",
-                }
-            )
-    finally:
-        conn.close()
+    for username, nick_name, remark in contacts_repo.query_contact_rows(db_path):
+        display = remark if remark else nick_name if nick_name else username
+        names[username] = display
+        full.append(
+            {
+                "username": username,
+                "nick_name": nick_name or "",
+                "remark": remark or "",
+            }
+        )
     return names, full
 
 
 def _resolve_contact_db_path(cache, decrypted_dir):
-    pre_decrypted = os.path.join(decrypted_dir, "contact", "contact.db")
-    if os.path.exists(pre_decrypted):
-        return pre_decrypted
-    return cache.get(os.path.join("contact", "contact.db"))
+    return contacts_repo.resolve_contact_db_path(cache, decrypted_dir)
 
 
 def _load_contact_dataset(cache, decrypted_dir):
@@ -84,6 +76,24 @@ def get_contact_names(cache, decrypted_dir):
 def get_contact_full(cache, decrypted_dir):
     _, full = _load_contact_dataset(cache, decrypted_dir)
     return full
+
+
+def search_contacts(cache, decrypted_dir, query="", limit=None):
+    full = get_contact_full(cache, decrypted_dir)
+    if query:
+        query_lower = query.lower()
+        matched = [
+            contact
+            for contact in full
+            if query_lower in contact.get("nick_name", "").lower()
+            or query_lower in contact.get("remark", "").lower()
+            or query_lower in contact.get("username", "").lower()
+        ]
+    else:
+        matched = list(full)
+    if limit is not None:
+        matched = matched[:limit]
+    return matched
 
 
 def resolve_username(chat_name, cache, decrypted_dir):
@@ -134,60 +144,32 @@ def get_group_members(chatroom_username, cache, decrypted_dir):
         return {"members": [], "owner": ""}
 
     names = get_contact_names(cache, decrypted_dir)
-    conn = sqlite3.connect(db_path)
-    try:
-        row = conn.execute(
-            "SELECT id FROM contact WHERE username = ?",
-            (chatroom_username,),
-        ).fetchone()
-        if not row:
-            return {"members": [], "owner": ""}
-        room_id = row[0]
+    group_data = contacts_repo.query_group_members(db_path, chatroom_username)
+    if not group_data:
+        return {"members": [], "owner": ""}
 
-        owner = ""
-        owner_row = conn.execute(
-            "SELECT owner FROM chat_room WHERE id = ?",
-            (room_id,),
-        ).fetchone()
-        if owner_row and owner_row[0]:
-            owner = names.get(owner_row[0], owner_row[0])
+    owner_username = group_data["owner_username"]
+    owner = names.get(owner_username, owner_username) if owner_username else ""
 
-        member_ids = [
-            item[0]
-            for item in conn.execute(
-                "SELECT member_id FROM chatroom_member WHERE room_id = ?",
-                (room_id,),
-            ).fetchall()
-        ]
-        if not member_ids:
-            return {"members": [], "owner": owner}
-
-        placeholders = ",".join("?" * len(member_ids))
-        members = []
-        for _, username, nick_name, remark in conn.execute(
-            f"SELECT id, username, nick_name, remark FROM contact WHERE id IN ({placeholders})",
-            member_ids,
-        ):
-            display = remark if remark else nick_name if nick_name else username
-            members.append(
-                {
-                    "username": username,
-                    "nick_name": nick_name or "",
-                    "remark": remark or "",
-                    "display_name": display,
-                }
-            )
-
-        owner_username = owner_row[0] if owner_row else ""
-        members.sort(
-            key=lambda item: (
-                0 if item["username"] == owner_username else 1,
-                item["display_name"],
-            )
+    members = []
+    for _, username, nick_name, remark in group_data["members"]:
+        display = remark if remark else nick_name if nick_name else username
+        members.append(
+            {
+                "username": username,
+                "nick_name": nick_name or "",
+                "remark": remark or "",
+                "display_name": display,
+            }
         )
-        return {"members": members, "owner": owner}
-    finally:
-        conn.close()
+
+    members.sort(
+        key=lambda item: (
+            0 if item["username"] == owner_username else 1,
+            item["display_name"],
+        )
+    )
+    return {"members": members, "owner": owner}
 
 
 def get_contact_detail(username, cache, decrypted_dir):
@@ -195,41 +177,37 @@ def get_contact_detail(username, cache, decrypted_dir):
     if not db_path:
         return None
 
-    conn = sqlite3.connect(db_path)
-    try:
-        row = conn.execute(
-            "SELECT username, nick_name, remark, alias, description, "
-            "small_head_url, big_head_url, verify_flag, local_type "
-            "FROM contact WHERE username = ?",
-            (username,),
-        ).fetchone()
-        if not row:
-            return None
-        (
-            resolved_username,
-            nick_name,
-            remark,
-            alias,
-            description,
-            small_head_url,
-            big_head_url,
-            verify_flag,
-            local_type,
-        ) = row
-        return {
-            "username": resolved_username,
-            "nick_name": nick_name or "",
-            "remark": remark or "",
-            "alias": alias or "",
-            "description": description or "",
-            "avatar": small_head_url or big_head_url or "",
-            "verify_flag": verify_flag or 0,
-            "local_type": local_type,
-            "is_group": "@chatroom" in resolved_username,
-            "is_subscription": resolved_username.startswith("gh_"),
-        }
-    finally:
-        conn.close()
+    row = contacts_repo.query_contact_detail_row(db_path, username)
+    if not row:
+        return None
+    (
+        resolved_username,
+        nick_name,
+        remark,
+        alias,
+        description,
+        small_head_url,
+        big_head_url,
+        verify_flag,
+        local_type,
+    ) = row
+    return {
+        "username": resolved_username,
+        "nick_name": nick_name or "",
+        "remark": remark or "",
+        "alias": alias or "",
+        "description": description or "",
+        "avatar": small_head_url or big_head_url or "",
+        "verify_flag": verify_flag or 0,
+        "local_type": local_type,
+        "is_group": "@chatroom" in resolved_username,
+        "is_subscription": resolved_username.startswith("gh_"),
+    }
+
+
+def find_contact_detail(name_or_id, cache, decrypted_dir):
+    username = resolve_username(name_or_id, cache, decrypted_dir) or name_or_id
+    return get_contact_detail(username, cache, decrypted_dir)
 
 
 def display_name_for_username(username, names, db_dir, cache, decrypted_dir):
