@@ -36,14 +36,12 @@
 git clone <this-repo-url>
 cd wechat-cli
 py -3.14 -m pip install -e .
+#Windows PowerShell 运行 Get-Command wechat-cli，查看PATH中是否有wechat-cli
 ```
 
-### Windows PowerShell 中如何执行命令
-
-安装完成后，PowerShell 里常见有 3 种运行方式：
+安装完成后，Windows PowerShell 里常见有 3 种运行方式：
 
 ```powershell
-#运行 Get-Command wechat-cli，查看PATH中是否有wechat-cli
 
 # 方式 1：如果 wechat-cli 已经在 PATH 中
 wechat-cli init
@@ -58,7 +56,7 @@ py -3.14 -m wechat_cli.main sessions --limit 10
 .\.venv\Scripts\wechat-cli.exe sessions --limit 10
 ```
 
-如果你已经执行了 `pip install -e .`，但 PowerShell 里提示找不到 `wechat-cli`，最稳妥的做法就是直接使用 `py -3.14 -m wechat_cli.main init`。
+如果你已经执行了 `py -3.14 -m pip install -e .`，但 PowerShell 里提示找不到 `wechat-cli`，最稳妥的做法就是直接使用 `py -3.14 -m wechat_cli.main init`。
 
 下面 README 里所有 `wechat-cli init` 示例，在 PowerShell 中都可以按同样规则替换成 `py -3.14 -m wechat_cli.main init` 或 `.\.venv\Scripts\wechat-cli.exe init`。
 
@@ -66,7 +64,7 @@ py -3.14 -m wechat_cli.main sessions --limit 10
 
 这 3 个名字看起来很像，但用途不同：
 
-- 仓库目录 / 项目名可以叫 `wechat-cli`
+- 仓库目录 / 项目名叫 `wechat-cli`
 - 终端命令名是 `wechat-cli`
 - Python 包目录和导入名必须是 `wechat_cli`
 
@@ -76,8 +74,6 @@ py -3.14 -m wechat_cli.main sessions --limit 10
 wechat-cli sessions --limit 10
 py -3.14 -m wechat_cli.main sessions --limit 10
 ```
-
-不要把 Python 包目录改成 `wechat-cli`，因为 `-` 不是合法的 Python 模块名。
 
 ---
 
