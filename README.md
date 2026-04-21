@@ -16,7 +16,7 @@
 ## ✨ 功能亮点
 
 - **🚀 开箱即用** — `npm install -g` 一键安装，无需 Python
-- **📦 11 个命令** — sessions、history、search、contacts、members、stats、export、favorites、unread、new-messages、init
+- **📦 11 个命令** — sessions、history、search、contacts、members、stats、export、favorites、unread、session-updates、init
 - **🤖 AI 优先** — 默认 JSON 输出，专为 LLM Agent 工具调用设计
 - **🔒 全程本地** — SQLCipher 即时解密，数据不出本机
 - **📊 丰富统计** — 发言排行、消息类型分布、24 小时活跃图
@@ -136,7 +136,7 @@ WeChat CLI 专为 AI Agent 设计，所有命令默认输出结构化 JSON。
 - `wechat-cli search "关键词" --chat "聊天名"` — 搜索消息
 - `wechat-cli contacts --query "名称"` — 搜索联系人
 - `wechat-cli unread` — 显示未读会话
-- `wechat-cli new-messages` — 获取上次以来的新消息
+- `wechat-cli session-updates` — 获取上次以来的会话更新
 - `wechat-cli members "群名"` — 列出群成员
 - `wechat-cli stats "聊天名" --format text` — 聊天统计
 ```
@@ -160,8 +160,8 @@ wechat-cli history "张三" --limit 30 --format text
 # 带过滤条件搜索
 wechat-cli search "报告" --type file --limit 10
 
-# 监控新消息（适合定时任务）
-wechat-cli new-messages --format text
+# 监控会话更新（适合定时任务）
+wechat-cli session-updates --format text
 ```
 
 ---
@@ -253,12 +253,14 @@ wechat-cli unread                          # 所有未读会话
 wechat-cli unread --limit 10 --format text
 ```
 
-### `new-messages` — 增量新消息
+### `session-updates` — 会话级增量更新
 
 ```bash
-wechat-cli new-messages                    # 首次: 返回未读消息 + 保存状态
-wechat-cli new-messages                    # 后续: 仅返回上次以来的新消息
+wechat-cli session-updates                 # 首次: 返回未读会话快照 + 保存状态
+wechat-cli session-updates                 # 后续: 仅返回上次以来有变化的会话
 ```
+
+这是基于 `session.db` 的会话级更新流，不是严格意义上的逐条新消息流。兼容旧命令名 `wechat-cli new-messages`。
 
 状态保存在 `~/.wechat-cli/last_check.json`，删除此文件可重置。
 

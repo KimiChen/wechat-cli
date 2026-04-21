@@ -27,7 +27,7 @@ def cli(ctx, config_path):
       wechat-cli search "Claude" --chat "AI交流群"   # 在指定群里搜索关键词
       wechat-cli search "你好" --limit 50           # 全局搜索
       wechat-cli contacts --query "李"              # 搜索联系人
-      wechat-cli new-messages                       # 获取增量新消息
+      wechat-cli session-updates                    # 获取会话级增量更新
     """
     # init/version 命令不需要 AppContext
     if ctx.invoked_subcommand in ("init", "version"):
@@ -49,7 +49,7 @@ from .commands.sessions import sessions
 from .commands.history import history
 from .commands.search import search
 from .commands.contacts import contacts
-from .commands.new_messages import new_messages
+from .commands.session_updates import new_messages, session_updates
 from .commands.members import members
 from .commands.export import export
 from .commands.stats import stats
@@ -61,6 +61,7 @@ cli.add_command(sessions)
 cli.add_command(history)
 cli.add_command(search)
 cli.add_command(contacts)
+cli.add_command(session_updates)
 cli.add_command(new_messages)
 cli.add_command(members)
 cli.add_command(export)
