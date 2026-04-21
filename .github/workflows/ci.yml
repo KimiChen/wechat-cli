@@ -29,7 +29,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.14"
           cache: pip
 
       - name: Install package
@@ -44,15 +44,8 @@ jobs:
         run: python -m unittest discover -s tests -v
 
   package-smoke:
-    name: Python Package Smoke (${{ matrix.python-version }})
+    name: Python Package Smoke (3.14)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version:
-          - "3.10"
-          - "3.11"
-          - "3.12"
 
     steps:
       - name: Checkout
@@ -61,7 +54,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.14"
           cache: pip
 
       - name: Install packaging tools

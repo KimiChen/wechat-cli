@@ -55,8 +55,8 @@
   当前已新增 `scripts/bump_version.py`，可同步更新 `pyproject.toml` 与 `wechat_cli.__version__`，并支持 `--dry-run`、`--print-current` 与 `--allow-misaligned`。
 - [x] 补目标环境安装 smoke。
   当前 `scripts/package_smoke.py` 已在构建后自动创建临时虚拟环境，分别安装 wheel / sdist，并校验 `wechat-cli` 入口和模块导入可用，避免“能 build 但装完跑不起来”的回归。
-- [x] 补多 Python 版本安装验证。
-  当前 GitHub Actions 的 package smoke 已扩为 Python `3.10`、`3.11`、`3.12` 矩阵，覆盖最小支持版本到当前主力版本的安装链路。
+- [x] 补目标 Python 版本安装验证。
+  当前 GitHub Actions 的 package smoke 固定在 Python `3.14` 上执行，覆盖仓库唯一支持版本的打包与安装链路。
 - [x] 补发布产物内容与哈希校验。
   当前 `scripts/package_smoke.py` 会校验 wheel / sdist 文件名与关键归档成员，并打印每个产物的 SHA256，帮助提前发现发布产物布局漂移。
 

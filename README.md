@@ -30,7 +30,7 @@
 
 ### 从源码安装
 
-需要 Python >= 3.10。
+需要 Python 3.14。
 
 ```bash
 git clone <this-repo-url>

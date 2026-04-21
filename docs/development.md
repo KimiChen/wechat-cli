@@ -299,7 +299,7 @@ python scripts/prepare_release.py --skip-package-smoke
 - 如需手动产出发布物，可额外执行 `python -m build`，再在目标环境里试装 sdist / wheel。
 - 当前 `package_smoke.py` 已包含发布产物内容校验：它会检查 wheel / sdist 文件名、关键归档成员，并打印每个产物的 SHA256。
 - 当前 `package_smoke.py` 也包含目标环境安装 smoke：它会在临时虚拟环境中安装 wheel / sdist，并校验 `wechat-cli --version`、`wechat-cli --help` 与模块导入。
-- GitHub Actions 当前也会在 Python `3.10`、`3.11`、`3.12` 上重复执行 package smoke，覆盖最小支持版本到当前主力版本的安装链路。
+- GitHub Actions 当前会在 Python `3.14` 上执行 package smoke，确保唯一受支持版本的打包与安装链路可用。
 - 如果你还想进一步提高发布把关强度，可以再加一层更贴近真实用户环境的 smoke，例如 GitHub Release 资产校验或更多 Python 版本矩阵。
 
 ## 已知兼容性边界
