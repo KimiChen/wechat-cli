@@ -35,8 +35,14 @@
 
 - [x] 审核并收紧 `messages.py` / `db_cache.py` 中过宽的异常吞噬路径。
   说明：`messages.py` 现在只吞预期的数据库/媒体解析异常，避免把编程错误静默吃掉；`db_cache.py` 的临时文件清理改成 `finally` 路径，不再依赖 `except Exception` 做清理。
-- [ ] 继续补命令壳层测试。
-  说明：`export` 异常分支和 `history` 文本模式已补上；后续可继续覆盖帮助文本，以及其它用户可见错误提示。
+- [x] 收紧 `contacts.py` 联系人数据加载的异常边界。
+  说明：联系人加载现在只对预期的 SQLite / 文件错误降级为空结果，非预期的编程错误会直接抛出，并补了对称回归测试。
+- [x] 清理 `main.py` / `commands/init.py` / `keys/scanner_macos.py` 中剩余的宽泛异常捕获。
+  说明：CLI 入口现在只拦截预期的上下文初始化错误；`init` 只对密钥提取链路里的运行时/外部 I/O 错误给出用户态提示；macOS 签名与 entitlement 读取也只吞预期的 `codesign` / plist 失败，非预期 bug 会直接暴露。
+- [x] 继续补命令壳层测试（含 help 文本）。
+  说明：`export` 异常分支、`history` 文本模式，以及顶层 CLI / `history` / `export` 的帮助文本都已补上；其中已明确校验 `session-updates` 可见、`new-messages` 隐藏，以及关键选项未回退。
+- [x] 继续补其它用户可见提示回归测试。
+  说明：已覆盖 `stats` / `search` / `contacts` / `members` 的关键错误提示、空结果提示和群聊/时间范围文本，也补齐了 CLI / `init` 的初始化错误分支；命令壳层的主要用户可见文案现在已有系统性回归保护。
 
 ## 发布前检查
 
